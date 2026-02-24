@@ -16,7 +16,9 @@ public class AuthScreen {
 
     public User show() {
         while (true) {
-
+            System.out.println("\n" + "=".repeat(50));
+            System.out.println("  RESUME BUILDER - PHASE 1: AUTHENTICATION");
+            System.out.println("=".repeat(50));
             System.out.println("1. Login");
             System.out.println("2. Register");
             System.out.println("3. Exit");
@@ -26,24 +28,24 @@ public class AuthScreen {
 
             switch (choice) {
                 case "1":
-                    User user = methLogin();
+                    User user = handleLogin();
                     if (user != null) {
                         return user;
                     }
                     break;
                 case "2":
-                    methRegister();
+                    handleRegister();
                     break;
                 case "3":
-                    System.out.println("exiting");
+                    System.out.println("\nGoodbye!");
                     System.exit(0);
                 default:
-                    System.out.println("invalid try again");
+                    System.out.println("\nInvalid option. Please try again.");
             }
         }
     }
 
-    private User methLogin() {
+    private User handleLogin() {
         System.out.println("\n--- LOGIN ---");
         System.out.print("Username: ");
         String username = scanner.nextLine();
@@ -52,15 +54,15 @@ public class AuthScreen {
 
         User user = userDAO.loginUser(username, password);
         if (user != null) {
-            System.out.println("\n✓ Login success " + user.getUsername());
+            System.out.println("\n✓ Login successful! Welcome, " + user.getUsername());
             return user;
         } else {
-            System.out.println("\n Invalid id,pass");
+            System.out.println("\n✗ Invalid credentials. Please try again.");
             return null;
         }
     }
 
-    private void methRegister() {
+    private void handleRegister() {
         System.out.println("\n--- REGISTER ---");
         System.out.print("Username: ");
         String username = scanner.nextLine();
@@ -71,9 +73,9 @@ public class AuthScreen {
 
         User user = new User(username, password, email);
         if (userDAO.registerUser(user)) {
-            System.out.println("Regi successfulgoto login");
+            System.out.println("\n✓ Registration successful! You can now login.");
         } else {
-            System.out.println("Regi failed, username, email already exists");
+            System.out.println("\n✗ Registration failed. Username or email may already exist.");
         }
     }
 }

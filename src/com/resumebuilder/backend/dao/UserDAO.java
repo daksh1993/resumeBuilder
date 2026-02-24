@@ -19,7 +19,7 @@ public class UserDAO {
             pstmt.executeUpdate();
             return true;
         } catch (SQLException e) {
-            System.err.println("error on regi: " + e.getMessage());
+            System.err.println("Error registering user: " + e.getMessage());
             return false;
         }
     }
@@ -40,11 +40,32 @@ public class UserDAO {
                 user.setUsername(rs.getString("username"));
                 user.setPassword(rs.getString("password"));
                 user.setEmail(rs.getString("email"));
+                user.setFullName(rs.getString("full_name"));
+                user.setPhone(rs.getString("phone"));
+                user.setAddress(rs.getString("address"));
                 return user;
             }
         } catch (SQLException e) {
-            System.err.println("error in lohin" + e.getMessage());
+            System.err.println("Error logging in: " + e.getMessage());
         }
         return null;
+    }
+    
+    public boolean updateUserProfile(User user) {
+        String sql = "UPDATE users SET full_name = ?, phone = ?, address = ? WHERE user_id = ?";
+        
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, user.getFullName());
+            pstmt.setString(2, user.getPhone());
+            pstmt.setString(3, user.getAddress());
+            pstmt.setInt(4, user.getUserId());
+            pstmt.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Error updating profile: " + e.getMessage());
+            return false;
+        }
     }
 }

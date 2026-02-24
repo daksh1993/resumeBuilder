@@ -1,45 +1,50 @@
-# Resume Builder - Phase 1: Basic Authentication
+# Resume Builder - Phase 2: Authentication + User Profile
 
 ## Overview
-This is **Phase 1** of the Resume Builder project, focusing on **basic user authentication**.
+This is **Phase 2** of the Resume Builder project, adding **user profile management** to the authentication system.
 
 ## Features
 - ✓ User Registration
-- ✓ User Login  
+- ✓ User Login
+- ✓ **User Profile Management (NEW)**
+- ✓ **Profile Update Functionality (NEW)**
 - ✓ SQLite Database Integration
 - ✓ CLI Interface
 
 ## Project Structure
 ```
-JavaProj-phase1/
+JavaProj-phase2/
 ├── src/
 │   └── com/resumebuilder/
 │       ├── backend/
 │       │   ├── dao/
-│       │   │   └── UserDAO.java
+│       │   │   └── UserDAO.java (updated)
 │       │   ├── model/
-│       │   │   └── User.java
+│       │   │   └── User.java (updated with profile fields)
 │       │   └── util/
-│       │       └── DatabaseConnection.java
+│       │       └── DatabaseConnection.java (updated)
 │       └── cli/
 │           ├── AuthScreen.java
-│           └── CLIApp.java
+│           ├── ProfileScreen.java (NEW)
+│           └── CLIApp.java (updated)
 ├── db/
-│   └── (database created at runtime)
 ├── lib/
-│   └── sqlite-jdbc-3.47.1.0.jar
 └── run_app.sh
 ```
 
+## New in Phase 2
+- **Profile Fields**: Full name, phone number, and address
+- **Profile Screen**: View and update user profile information
+- **Main Menu**: Navigate between profile and logout
+
 ## How to Run
 ```bash
-chmod +x run_app.sh
+./download_dependencies.sh  # First time only
 ./run_app.sh
 ```
 
 ## What's Next?
-- **Phase 2**: Add user profile management
-- **Phase 3**: Add basic resume data models
+- **Phase 3**: Add basic resume data models (Education, Experience, Skills)
 - **Phase 4**: Add full resume CRUD operations
 - **Phase 5**: Add template system
 - **Phase 6**: Add PDF generation

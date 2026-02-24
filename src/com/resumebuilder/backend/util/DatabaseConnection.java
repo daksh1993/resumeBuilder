@@ -16,10 +16,20 @@ public class DatabaseConnection {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
             
-           
-            System.out.println("DB initialized successfully");
+            // Create users table
+            String createUsersTable = "CREATE TABLE IF NOT EXISTS users (" +
+                    "user_id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "username TEXT UNIQUE NOT NULL," +
+                    "password TEXT NOT NULL," +
+                    "email TEXT UNIQUE NOT NULL," +
+                    "full_name TEXT," +
+                    "phone TEXT," +
+                    "address TEXT)";
+            stmt.execute(createUsersTable);
+            
+            System.out.println("Database initialized successfully");
         } catch (SQLException e) {
-            System.err.println("Error in initializing db: " + e.getMessage());
+            System.err.println("Error initializing database: " + e.getMessage());
         }
     }
 }
