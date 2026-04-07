@@ -5,7 +5,9 @@ import com.resumebuilder.backend.customsection.FlexibleCustomSection;
 import com.resumebuilder.backend.customsection.PresetCustomSection;
 import com.resumebuilder.backend.dao.ResumeDAO;
 import com.resumebuilder.backend.dao.UserDAO;
+import com.resumebuilder.backend.exception.CustomSectionException;
 import com.resumebuilder.backend.exception.DatabaseException;
+import com.resumebuilder.backend.exception.InvalidInputException;
 import com.resumebuilder.backend.exception.ResumeNotFoundException;
 import com.resumebuilder.backend.model.CustomParameter;
 import com.resumebuilder.backend.model.Education;
@@ -792,32 +794,28 @@ public class ResumeBuilderApp extends Application {
         }
 
         private void saveResume() {
-            String title = titleField.getText().trim();
-            if (title.isEmpty()) {
-                showError(stage, "Missing Title", "Resume title is required.");
-                return;
-            }
-
-            resume.setTitle(title);
-            resume.setFullName(blankToNull(fullNameField.getText()));
-            resume.setEmail(blankToNull(emailField.getText()));
-            resume.setPhone(blankToNull(phoneField.getText()));
-            resume.setAddress(blankToNull(addressField.getText()));
-            resume.setSummary(blankToNull(summaryArea.getText()));
-            resume.setTemplateName(templateBox.getValue());
-            resume.setColorTheme(themeBox.getValue());
-            resume.setEducationList(new ArrayList<>(educationItems));
-            resume.setExperienceList(new ArrayList<>(experienceItems));
-            resume.setProjectList(new ArrayList<>(projectItems));
-            resume.setSkillList(new ArrayList<>(skillItems));
-            resume.setCustomSections(new ArrayList<>(customSectionItems));
-
             try {
+                resume.setTitle(requireNonEmptyOrThrow(titleField.getText(), "Resume title is required."));
+                resume.setFullName(blankToNull(fullNameField.getText()));
+                resume.setEmail(blankToNull(emailField.getText()));
+                resume.setPhone(blankToNull(phoneField.getText()));
+                resume.setAddress(blankToNull(addressField.getText()));
+                resume.setSummary(blankToNull(summaryArea.getText()));
+                resume.setTemplateName(templateBox.getValue());
+                resume.setColorTheme(themeBox.getValue());
+                resume.setEducationList(new ArrayList<>(educationItems));
+                resume.setExperienceList(new ArrayList<>(experienceItems));
+                resume.setProjectList(new ArrayList<>(projectItems));
+                resume.setSkillList(new ArrayList<>(skillItems));
+                resume.setCustomSections(new ArrayList<>(customSectionItems));
+
                 resumeDAO.saveResume(resume);
                 if (onSaved != null) {
                     onSaved.run();
                 }
                 stage.close();
+            } catch (InvalidInputException e) {
+                showError(stage, "INPUT ERROR", e.getMessage());
             } catch (ResumeNotFoundException e) {
                 showError(stage, "Save Failed", "The resume could not be found for update.");
             } catch (DatabaseException e) {
@@ -1105,22 +1103,13 @@ dialog.getDialogPane().setPrefWidth(700);
                     refreshRows();
                 }
 
-                private AbstractCustomSection buildSection() {
-                    String header = headerField.getText().trim();
-                    if (header.isEmpty()) {
-                        throw new IllegalArgumentException("Section header is required.");
-                    }
-
-                    String selection = occupationTypeBox.getValue();
-                    if (selection == null || selection.trim().isEmpty()) {
-                        throw new IllegalArgumentException("Select an occupation type.");
-                    }
-
+                private AbstractCustomSection buildSection() throws InvalidInputException, CustomSectionException {
+                    String header = requireNonEmptyOrThrow(headerField.getText(), "Section header is required.");
+                    String selection = requireNonEmptyOrThrow(occupationTypeBox.getValue(), "Select an occupation type.");
                     boolean isCustom = PresetCustomSection.isCustomOption(selection);
-                    String occupation = isCustom ? customOccupationField.getText().trim() : selection;
-                    if (occupation.isEmpty()) {
-                        throw new IllegalArgumentException("Occupation name is required.");
-                    }
+                    String occupation = isCustom
+                            ? requireNonEmptyOrThrow(customOccupationField.getText(), "Occupation name is required.")
+                            : selection;
 
                     List<CustomParameter> parameters = new ArrayList<>();
                     for (ParameterRow row : rows) {
@@ -1131,14 +1120,14 @@ dialog.getDialogPane().setPrefWidth(700);
                             continue;
                         }
                         if (name.isEmpty() || value.isEmpty()) {
-                            throw new IllegalArgumentException("Every parameter must have both a name and a value.");
+                            throw new InvalidInputException("Every parameter must have both a name and a value.");
                         }
 
                         parameters.add(new CustomParameter(name, value));
                     }
 
                     if (parameters.isEmpty()) {
-                        throw new IllegalArgumentException("Add at least one parameter.");
+                        throw new CustomSectionException("Custom section must contain at least one parameter.");
                     }
 
                     String[] presetFieldNames = PresetCustomSection.getFieldNamesForOccupation(occupation);
@@ -1208,8 +1197,11 @@ dialog.getDialogPane().setPrefWidth(700);
             saveButton.addEventFilter(ActionEvent.ACTION, event -> {
                 try {
                     formState.buildSection();
-                } catch (IllegalArgumentException ex) {
-                    showError(stage, "Invalid Custom Section", ex.getMessage());
+                } catch (InvalidInputException e) {
+                    showError(stage, "INPUT ERROR", e.getMessage());
+                    event.consume();
+                } catch (CustomSectionException e) {
+                    showError(stage, "SECTION ERROR", e.getMessage());
                     event.consume();
                 }
             });
@@ -1220,7 +1212,11 @@ dialog.getDialogPane().setPrefWidth(700);
                 if (button != saveType) {
                     return null;
                 }
-                return formState.buildSection();
+                try {
+                    return formState.buildSection();
+                } catch (InvalidInputException | CustomSectionException e) {
+                    return null;
+                }
             });
 
             dialog.showAndWait();
@@ -1234,6 +1230,14 @@ dialog.getDialogPane().setPrefWidth(700);
             grid.setPadding(new Insets(12));
             grid.setPrefWidth(460);
             return grid;
+        }
+
+        private String requireNonEmptyOrThrow(String value, String message) throws InvalidInputException {
+            String text = value == null ? "" : value.trim();
+            if (text.isEmpty()) {
+                throw new InvalidInputException(message);
+            }
+            return text;
         }
 
         private String formatCustomSection(AbstractCustomSection section) {
