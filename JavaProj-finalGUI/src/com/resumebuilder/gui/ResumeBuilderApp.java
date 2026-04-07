@@ -478,7 +478,7 @@ public class ResumeBuilderApp extends Application {
             templateBox.setItems(FXCollections.observableArrayList("Classic", "Modern", "Creative", "Minimal"));
             templateBox.setValue(safe(resume.getTemplateName()).isEmpty() ? "Classic" : resume.getTemplateName());
 
-            themeBox.setItems(FXCollections.observableArrayList("Blue", "Green", "Grey"));
+            themeBox.setItems(FXCollections.observableArrayList("Blue", "Green", "Grey", "Red","Teal"));
             themeBox.setValue(safe(resume.getColorTheme()).isEmpty() ? "Blue" : resume.getColorTheme());
 
             summaryArea.setText(safe(resume.getSummary()));

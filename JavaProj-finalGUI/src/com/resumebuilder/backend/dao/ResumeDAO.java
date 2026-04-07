@@ -23,13 +23,7 @@ import java.util.List;
 
 public class ResumeDAO {
 
-    public void save(Resume resume) throws SQLException {
-        try {
-            saveResume(resume);
-        } catch (DatabaseException | ResumeNotFoundException e) {
-            throw new SQLException(e.getMessage(), e);
-        }
-    }
+    
 
     public void saveResume(Resume resume) throws DatabaseException, ResumeNotFoundException {
         Connection conn = null;

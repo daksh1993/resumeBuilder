@@ -1,0 +1,4532 @@
+===== ./src/com/resumebuilder/pdf/PdfGenerator.java =====
+package com.resumebuilder.pdf;
+
+import com.lowagie.text.*;
+import com.lowagie.text.pdf.*;
+import com.lowagie.text.pdf.draw.LineSeparator;
+import com.resumebuilder.backend.customsection.AbstractCustomSection;
+import com.resumebuilder.backend.model.*;
+import java.awt.Color;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.util.List;
+
+public class PdfGenerator {
+
+
+    
+    public static void generate(Resume resume, java.io.OutputStream out) throws IOException, DocumentException {
+        Document document = new Document(PageSize.A4, 36, 36, 36, 50);
+        PdfWriter writer = PdfWriter.getInstance(document, out);
+        writer.setPageEvent(new PageNumbersInfo());
+        document.open();
+
+        Color themeColor = getThemeColor(resume.getColorTheme());
+        Color lightTheme = getLightThemeColor(themeColor);
+        
+        Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 26, Font.NORMAL, themeColor);
+        Font subTitleFont = FontFactory.getFont(FontFactory.HELVETICA, 16, Font.ITALIC, Color.DARK_GRAY);
+        Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, Font.NORMAL, themeColor);
+        Font normalFont = FontFactory.getFont(FontFactory.HELVETICA, 11, Font.NORMAL, Color.BLACK);
+        Font boldFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, Font.NORMAL, Color.BLACK);
+        Font smallFont = FontFactory.getFont(FontFactory.HELVETICA, 10, Font.NORMAL, Color.DARK_GRAY);
+        Font italicFont = FontFactory.getFont(FontFactory.HELVETICA_OBLIQUE, 10, Font.ITALIC, Color.GRAY);
+
+        String template = resume.getTemplateName();
+        if ("Modern".equalsIgnoreCase(template)) {
+            generateModernTemplate(document, resume, themeColor, lightTheme, titleFont, subTitleFont, sectionFont, normalFont, boldFont, smallFont, italicFont);
+        } else if ("Creative".equalsIgnoreCase(template)) {
+            generateCreativeTemplate(document, resume, themeColor, lightTheme, titleFont, subTitleFont, sectionFont, normalFont, boldFont, smallFont, italicFont);
+        } else if ("Minimal".equalsIgnoreCase(template)) {
+            generateMinimalTemplate(document, resume, themeColor, lightTheme, titleFont, subTitleFont, sectionFont, normalFont, boldFont, smallFont, italicFont);
+        } else {
+            generateClassicTemplate(document, resume, themeColor, lightTheme, titleFont, subTitleFont, sectionFont, normalFont, boldFont, smallFont, italicFont);
+        }
+
+        document.close();
+    }
+
+    private static Color getThemeColor(String themeName) {
+        if ("Green".equalsIgnoreCase(themeName)) return new Color(34, 139, 34);
+        if ("Grey".equalsIgnoreCase(themeName)) return new Color(60, 60, 60);
+        if ("Red".equalsIgnoreCase(themeName)) return new Color(153, 27, 27);
+        if ("Purple".equalsIgnoreCase(themeName)) return new Color(102, 51, 153);
+        if ("Teal".equalsIgnoreCase(themeName)) return new Color(0, 128, 128);
+        if ("Orange".equalsIgnoreCase(themeName)) return new Color(204, 85, 0);
+        return new Color(0, 102, 204); // Default Blue
+    }
+    
+    private static Color getLightThemeColor(Color themeColor) {
+        int r = Math.min(255, themeColor.getRed() + 200);
+        int g = Math.min(255, themeColor.getGreen() + 200);
+        int b = Math.min(255, themeColor.getBlue() + 200);
+        return new Color(r, g, b);
+    }
+    
+
+    private static void generateClassicTemplate(Document doc, Resume r, Color theme, Color lightTheme, 
+            Font titleFont, Font subTitleFont, Font sectionFont, Font normalFont, Font boldFont, Font smallFont, Font italicFont) 
+            throws DocumentException, IOException {
+        
+        // Header with Photo and Info (Horizontal Layout)
+        PdfPTable headerTable = new PdfPTable(2);
+        headerTable.setWidthPercentage(100);
+        headerTable.setWidths(new float[]{25, 75}); // Photo 25%, Info 75%
+        headerTable.setSpacingAfter(15);
+        
+        // Left Cell - Photo
+        PdfPCell photoCell = new PdfPCell();
+        photoCell.setBorder(Rectangle.NO_BORDER);
+        photoCell.setPadding(10);
+        photoCell.setVerticalAlignment(Element.ALIGN_TOP);
+        photoCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        
+        if (r.getPhotoPath() != null && !r.getPhotoPath().isEmpty()) {
+            try {
+                Image img = Image.getInstance(r.getPhotoPath());
+                img.scaleToFit(100, 100);
+                img.setAlignment(Element.ALIGN_CENTER);
+                photoCell.addElement(img);
+            } catch (Exception e) { 
+                // No photo available
+            }
+        }
+        
+        // Right Cell - Name, Title, Contact
+        PdfPCell infoCell = new PdfPCell();
+        infoCell.setBorder(Rectangle.NO_BORDER);
+        infoCell.setPadding(10);
+        infoCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        
+        Paragraph name = new Paragraph(r.getFullName(), titleFont);
+        name.setSpacingAfter(5);
+        infoCell.addElement(name);
+        
+        if (r.getTitle() != null && !r.getTitle().isEmpty()) {
+            Paragraph title = new Paragraph(r.getTitle(), subTitleFont);
+            title.setSpacingAfter(10);
+            infoCell.addElement(title);
+        }
+        
+        Font contactFont = FontFactory.getFont(FontFactory.HELVETICA, 10, Font.NORMAL, Color.DARK_GRAY);
+        Paragraph contact = new Paragraph();
+        contact.add(new Chunk("📧 " + r.getEmail() + "  •  ", contactFont));
+        contact.add(new Chunk("📞 " + r.getPhone() + "  •  ", contactFont));
+        contact.add(new Chunk("📍 " + r.getAddress(), contactFont));
+        infoCell.addElement(contact);
+        
+        headerTable.addCell(photoCell);
+        headerTable.addCell(infoCell);
+        doc.add(headerTable);
+        
+        doc.add(new LineSeparator(2f, 100f, theme, Element.ALIGN_CENTER, -2));
+        doc.add(Chunk.NEWLINE);
+        
+        // Summary
+        if (r.getSummary() != null && !r.getSummary().isEmpty()) {
+            addEnhancedSection(doc, "PROFESSIONAL SUMMARY", sectionFont, theme);
+            Paragraph summary = new Paragraph(r.getSummary(), normalFont);
+            summary.setAlignment(Element.ALIGN_JUSTIFIED);
+            summary.setSpacingAfter(10);
+            doc.add(summary);
+        }
+
+          // Skills
+        if (!r.getSkillList().isEmpty()) {
+            addEnhancedSection(doc, "SKILLS", sectionFont, theme);
+            PdfPTable skillsTable = new PdfPTable(3);
+            skillsTable.setWidthPercentage(100);
+            skillsTable.setSpacingAfter(10);
+            
+            for (Skill s : r.getSkillList()) {
+                PdfPCell cell = new PdfPCell(new Phrase("• " + s.getSkillName(), normalFont));
+                cell.setBorder(Rectangle.NO_BORDER);
+                cell.setPadding(4);
+                skillsTable.addCell(cell);
+            }
+            doc.add(skillsTable);
+        }
+
+             // Education
+        if (!r.getEducationList().isEmpty()) {
+            addEnhancedSection(doc, "EDUCATION", sectionFont, theme);
+            for (Education e : r.getEducationList()) {
+                Paragraph degree = new Paragraph(e.getDegree(), boldFont);
+                degree.setSpacingAfter(2);
+                doc.add(degree);
+                
+                Paragraph uni = new Paragraph();
+                uni.add(new Chunk(e.getUniversity(), normalFont));
+                uni.add(new Chunk(" | " + e.getYear() + " | CGPA: " + e.getCgpa(), italicFont));
+                uni.setSpacingAfter(12);
+                doc.add(uni);
+            }
+        }
+        
+        
+        // Experience
+        if (!r.getExperienceList().isEmpty()) {
+            addEnhancedSection(doc, "EXPERIENCE", sectionFont, theme);
+            for (Experience e : r.getExperienceList()) {
+                Paragraph role = new Paragraph(e.getRole(), boldFont);
+                role.setSpacingAfter(2);
+                doc.add(role);
+                
+                Paragraph company = new Paragraph();
+                company.add(new Chunk(e.getCompany(), normalFont));
+                company.add(new Chunk(" | " + e.getDuration(), italicFont));
+                company.setSpacingAfter(5);
+                doc.add(company);
+                
+                Paragraph desc = new Paragraph(e.getDescription(), normalFont);
+                desc.setAlignment(Element.ALIGN_JUSTIFIED);
+                desc.setSpacingAfter(12);
+                doc.add(desc);
+            }
+        }
+        
+   
+        // Projects
+        if (!r.getProjectList().isEmpty()) {
+            addEnhancedSection(doc, "PROJECTS", sectionFont, theme);
+            for (Project p : r.getProjectList()) {
+                Paragraph projectTitle = new Paragraph(p.getTitle(), boldFont);
+                projectTitle.setSpacingAfter(5);
+                doc.add(projectTitle);
+                
+                Paragraph projectDesc = new Paragraph(p.getDescription(), normalFont);
+                projectDesc.setAlignment(Element.ALIGN_JUSTIFIED);
+                projectDesc.setSpacingAfter(12);
+                doc.add(projectDesc);
+            }
+        }
+
+        addClassicCustomSections(doc, r, sectionFont, normalFont, theme);
+    }
+
+
+    private static void generateModernTemplate(Document doc, Resume r, Color theme, Color lightTheme,
+            Font titleFont, Font subTitleFont, Font sectionFont, Font normalFont, Font boldFont, Font smallFont, Font italicFont)
+            throws DocumentException, IOException {
+        
+        // Two Column Layout
+        PdfPTable table = new PdfPTable(new float[]{35, 65});
+        table.setWidthPercentage(100);
+        table.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+        
+        // LEFT SIDEBAR
+        PdfPCell leftCell = new PdfPCell();
+        leftCell.setBorder(Rectangle.NO_BORDER);
+        leftCell.setBackgroundColor(theme);
+        leftCell.setPadding(20);
+        leftCell.setPaddingTop(30);
+        
+        // Photo
+        if (r.getPhotoPath() != null && !r.getPhotoPath().isEmpty()) {
+            try {
+                Image img = Image.getInstance(r.getPhotoPath());
+                img.scaleToFit(120, 120);
+                img.setAlignment(Element.ALIGN_CENTER);
+                leftCell.addElement(img);
+                leftCell.addElement(Chunk.NEWLINE);
+            } catch (Exception e) { }
+        }
+        
+        // Contact Section
+        Font sidebarHeading = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, Font.NORMAL, Color.WHITE);
+        Font sidebarText = FontFactory.getFont(FontFactory.HELVETICA, 11, Font.NORMAL, Color.WHITE);
+        
+        Paragraph contactHead = new Paragraph("CONTACT", sidebarHeading);
+        contactHead.setSpacingAfter(8);
+        leftCell.addElement(contactHead);
+        
+        leftCell.addElement(new Paragraph("• " + r.getEmail(), sidebarText));
+        leftCell.addElement(new Paragraph("• " + r.getPhone(), sidebarText));
+        leftCell.addElement(new Paragraph("• " + r.getAddress(), sidebarText));
+        leftCell.addElement(Chunk.NEWLINE);
+        leftCell.addElement(Chunk.NEWLINE);
+        
+        // Skills Section
+        if (!r.getSkillList().isEmpty()) {
+            Paragraph skillsHead = new Paragraph("SKILLS", sidebarHeading);
+            skillsHead.setSpacingAfter(8);
+            leftCell.addElement(skillsHead);
+            
+            for (Skill s : r.getSkillList()) {
+                Paragraph skill = new Paragraph("• " + s.getSkillName(), sidebarText);
+                skill.setSpacingAfter(4);
+                leftCell.addElement(skill);
+            }
+        }
+        
+        // RIGHT CONTENT
+        PdfPCell rightCell = new PdfPCell();
+        rightCell.setBorder(Rectangle.NO_BORDER);
+        rightCell.setPadding(20);
+        rightCell.setPaddingTop(30);
+        
+        // Name and Title
+        Paragraph name = new Paragraph(r.getFullName(), FontFactory.getFont(FontFactory.HELVETICA_BOLD, 28, Font.NORMAL, theme));
+        name.setSpacingAfter(5);
+        rightCell.addElement(name);
+        
+        if (r.getTitle() != null && !r.getTitle().isEmpty()) {
+            Paragraph title = new Paragraph(r.getTitle(), subTitleFont);
+            title.setSpacingAfter(15);
+            rightCell.addElement(title);
+        }
+        
+        // Summary
+        if (r.getSummary() != null && !r.getSummary().isEmpty()) {
+            addModernSection(rightCell, "SUMMARY", sectionFont, theme);
+            Paragraph summary = new Paragraph(r.getSummary(), normalFont);
+            summary.setAlignment(Element.ALIGN_JUSTIFIED);
+            summary.setSpacingAfter(15);
+            rightCell.addElement(summary);
+        }
+        
+        // Experience
+        if (!r.getExperienceList().isEmpty()) {
+            addModernSection(rightCell, "EXPERIENCE", sectionFont, theme);
+            for (Experience e : r.getExperienceList()) {
+                Paragraph role = new Paragraph(e.getRole(), boldFont);
+                role.setSpacingAfter(2);
+                rightCell.addElement(role);
+                
+                Paragraph companyDuration = new Paragraph();
+                companyDuration.add(new Chunk(e.getCompany() + " | ", normalFont));
+                companyDuration.add(new Chunk(e.getDuration(), italicFont));
+                companyDuration.setSpacingAfter(5);
+                rightCell.addElement(companyDuration);
+                
+                Paragraph desc = new Paragraph(e.getDescription(), normalFont);
+                desc.setAlignment(Element.ALIGN_JUSTIFIED);
+                desc.setSpacingAfter(12);
+                rightCell.addElement(desc);
+            }
+        }
+        
+        // Education
+        if (!r.getEducationList().isEmpty()) {
+            addModernSection(rightCell, "EDUCATION", sectionFont, theme);
+            for (Education e : r.getEducationList()) {
+                Paragraph degree = new Paragraph(e.getDegree(), boldFont);
+                degree.setSpacingAfter(2);
+                rightCell.addElement(degree);
+                
+                Paragraph uniInfo = new Paragraph();
+                uniInfo.add(new Chunk(e.getUniversity() + " | ", normalFont));
+                uniInfo.add(new Chunk(e.getYear() + " | CGPA: " + e.getCgpa(), italicFont));
+                uniInfo.setSpacingAfter(12);
+                rightCell.addElement(uniInfo);
+            }
+        }
+        
+        // Projects
+        if (!r.getProjectList().isEmpty()) {
+            addModernSection(rightCell, "PROJECTS", sectionFont, theme);
+            for (Project p : r.getProjectList()) {
+                Paragraph projectTitle = new Paragraph(p.getTitle(), boldFont);
+                projectTitle.setSpacingAfter(5);
+                rightCell.addElement(projectTitle);
+                
+                Paragraph projectDesc = new Paragraph(p.getDescription(), normalFont);
+                projectDesc.setAlignment(Element.ALIGN_JUSTIFIED);
+                projectDesc.setSpacingAfter(12);
+                rightCell.addElement(projectDesc);
+            }
+        }
+
+        addModernCustomSections(rightCell, r, sectionFont, normalFont, theme);
+        
+        table.addCell(leftCell);
+        table.addCell(rightCell);
+        doc.add(table);
+    }
+
+    private static void generateCreativeTemplate(Document doc, Resume r, Color theme, Color lightTheme,
+            Font titleFont, Font subTitleFont, Font sectionFont, Font normalFont, Font boldFont, Font smallFont, Font italicFont)
+            throws DocumentException, IOException {
+        
+        // Creative Header Banner (Horizontal Layout)
+        PdfPTable headerTable = new PdfPTable(2);
+        headerTable.setWidthPercentage(100);
+        headerTable.setWidths(new float[]{30, 70}); // Photo 30%, Text 70%
+        
+        Font headerNameFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 32, Font.NORMAL, Color.WHITE);
+        Font headerTitleFont = FontFactory.getFont(FontFactory.HELVETICA, 16, Font.NORMAL, Color.WHITE);
+        Font headerContactFont = FontFactory.getFont(FontFactory.HELVETICA, 11, Font.NORMAL, Color.WHITE);
+        
+        // Left Cell - Photo
+        PdfPCell photoCell = new PdfPCell();
+        photoCell.setBorder(Rectangle.NO_BORDER);
+        photoCell.setBackgroundColor(theme);
+        photoCell.setPadding(25);
+        photoCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        photoCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        
+        if (r.getPhotoPath() != null && !r.getPhotoPath().isEmpty()) {
+            try {
+                Image img = Image.getInstance(r.getPhotoPath());
+                img.scaleToFit(120, 120);
+                img.setAlignment(Element.ALIGN_CENTER);
+                photoCell.addElement(img);
+            } catch (Exception e) { 
+                // No photo - leave cell empty
+            }
+        }
+        
+        // Right Cell - Text Content
+        PdfPCell textCell = new PdfPCell();
+        textCell.setBorder(Rectangle.NO_BORDER);
+        textCell.setBackgroundColor(theme);
+        textCell.setPadding(25);
+        textCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        
+        Paragraph name = new Paragraph(r.getFullName(), headerNameFont);
+        name.setSpacingAfter(8);
+        textCell.addElement(name);
+        
+        if (r.getTitle() != null && !r.getTitle().isEmpty()) {
+            Paragraph title = new Paragraph(r.getTitle(), headerTitleFont);
+            title.setSpacingAfter(10);
+            textCell.addElement(title);
+        }
+        
+        Paragraph contact = new Paragraph();
+        contact.add(new Chunk(r.getEmail() + "  •  ", headerContactFont));
+        contact.add(new Chunk(r.getPhone() + "  •  ", headerContactFont));
+        contact.add(new Chunk(r.getAddress(), headerContactFont));
+        textCell.addElement(contact);
+        
+        headerTable.addCell(photoCell);
+        headerTable.addCell(textCell);
+        doc.add(headerTable);
+        doc.add(Chunk.NEWLINE);
+        doc.add(Chunk.NEWLINE);
+        
+        // Body Content
+        // Summary
+        if (r.getSummary() != null && !r.getSummary().isEmpty()) {
+            addCreativeSection(doc, "ABOUT ME", sectionFont, theme);
+            Paragraph summary = new Paragraph(r.getSummary(), normalFont);
+            summary.setAlignment(Element.ALIGN_JUSTIFIED);
+            summary.setSpacingAfter(15);
+            doc.add(summary);
+        }
+        
+        // Two-column for Education and Projects
+        PdfPTable bottomTable = new PdfPTable(2);
+        bottomTable.setWidthPercentage(100);
+        bottomTable.setWidths(new float[]{50, 50});
+        
+        // Education Column
+        PdfPCell eduCell = new PdfPCell();
+        eduCell.setBorder(Rectangle.NO_BORDER);
+        eduCell.setPaddingRight(10);
+        
+        if (!r.getEducationList().isEmpty()) {
+            addCreativeSection(eduCell, "EDUCATION", sectionFont, theme);
+            for (Education e : r.getEducationList()) {
+                Paragraph degree = new Paragraph(e.getDegree(), boldFont);
+                degree.setSpacingAfter(2);
+                eduCell.addElement(degree);
+                
+                Paragraph uniInfo = new Paragraph();
+                uniInfo.add(new Chunk(e.getUniversity(), smallFont));
+                uniInfo.setSpacingAfter(5);
+                eduCell.addElement(uniInfo);
+                
+                Paragraph cgpa = new Paragraph(e.getYear() + " | CGPA: " + e.getCgpa(), italicFont);
+                cgpa.setSpacingAfter(12);
+                eduCell.addElement(cgpa);
+            }
+        }
+
+        
+        
+        // Skills Column
+        PdfPCell skillsCell = new PdfPCell();
+        skillsCell.setBorder(Rectangle.NO_BORDER);
+        skillsCell.setPaddingLeft(10);
+        
+        if (!r.getSkillList().isEmpty()) {
+            addCreativeSection(skillsCell, "SKILLS", sectionFont, theme);
+            for (Skill s : r.getSkillList()) {
+                Paragraph skill = new Paragraph("✓ " + s.getSkillName(), normalFont);
+                skill.setSpacingAfter(4);
+                skillsCell.addElement(skill);
+            }
+        }
+
+        
+        
+        bottomTable.addCell(eduCell);
+        bottomTable.addCell(skillsCell);
+        doc.add(bottomTable);
+        
+
+
+
+        // Experience
+        if (!r.getExperienceList().isEmpty()) {
+            addCreativeSection(doc, "PROFESSIONAL EXPERIENCE", sectionFont, theme);
+            for (Experience e : r.getExperienceList()) {
+                PdfPTable expTable = new PdfPTable(1);
+                expTable.setWidthPercentage(100);
+                expTable.setSpacingAfter(10);
+                
+                PdfPCell expCell = new PdfPCell();
+                expCell.setBorder(Rectangle.LEFT);
+                expCell.setBorderColorLeft(theme);
+                expCell.setBorderWidthLeft(3);
+                expCell.setPadding(10);
+                
+                Paragraph role = new Paragraph(e.getRole(), boldFont);
+                role.setSpacingAfter(2);
+                expCell.addElement(role);
+                
+                Paragraph companyDuration = new Paragraph();
+                companyDuration.add(new Chunk(e.getCompany() + " | ", normalFont));
+                companyDuration.add(new Chunk(e.getDuration(), italicFont));
+                companyDuration.setSpacingAfter(5);
+                expCell.addElement(companyDuration);
+                
+                Paragraph desc = new Paragraph(e.getDescription(), normalFont);
+                desc.setAlignment(Element.ALIGN_JUSTIFIED);
+                expCell.addElement(desc);
+                
+                expTable.addCell(expCell);
+                doc.add(expTable);
+            }
+        }
+        
+
+
+        // Projects
+        if (!r.getProjectList().isEmpty()) {
+            doc.add(Chunk.NEWLINE);
+            addCreativeSection(doc, "PROJECTS", sectionFont, theme);
+            for (Project p : r.getProjectList()) {
+                Paragraph projectTitle = new Paragraph("◆ " + p.getTitle(), boldFont);
+                projectTitle.setSpacingAfter(5);
+                doc.add(projectTitle);
+                
+                Paragraph projectDesc = new Paragraph(p.getDescription(), normalFont);
+                projectDesc.setAlignment(Element.ALIGN_JUSTIFIED);
+                projectDesc.setSpacingAfter(12);
+                doc.add(projectDesc);
+            }
+        }
+
+        addCreativeCustomSections(doc, r, sectionFont, normalFont, theme);
+    }
+
+    private static void generateMinimalTemplate(Document doc, Resume r, Color theme, Color lightTheme,
+            Font titleFont, Font subTitleFont, Font sectionFont, Font normalFont, Font boldFont, Font smallFont, Font italicFont)
+            throws DocumentException, IOException {
+        
+        Font minimalName = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 28, Font.NORMAL, Color.BLACK);
+        Font minimalTitle = FontFactory.getFont(FontFactory.HELVETICA, 14, Font.ITALIC, theme);
+        Font minimalContact = FontFactory.getFont(FontFactory.HELVETICA, 10, Font.NORMAL, Color.DARK_GRAY);
+        Font minimalSection = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13, Font.NORMAL, theme);
+        
+        // Centered Header
+        Paragraph name = new Paragraph(r.getFullName().toUpperCase(), minimalName);
+        name.setAlignment(Element.ALIGN_CENTER);
+        name.setSpacingAfter(5);
+        doc.add(name);
+        
+        if (r.getTitle() != null && !r.getTitle().isEmpty()) {
+            Paragraph title = new Paragraph(r.getTitle(), minimalTitle);
+            title.setAlignment(Element.ALIGN_CENTER);
+            title.setSpacingAfter(8);
+            doc.add(title);
+        }
+        
+        Paragraph contact = new Paragraph();
+        contact.add(new Chunk(r.getEmail() + "  •  ", minimalContact));
+        contact.add(new Chunk(r.getPhone() + "  •  ", minimalContact));
+        contact.add(new Chunk(r.getAddress(), minimalContact));
+        contact.setAlignment(Element.ALIGN_CENTER);
+        contact.setSpacingAfter(12);
+        doc.add(contact);
+        
+        LineSeparator line = new LineSeparator();
+        line.setLineColor(Color.LIGHT_GRAY);
+        doc.add(line);
+        doc.add(Chunk.NEWLINE);
+        
+        // Content with minimal styling
+        if (r.getSummary() != null && !r.getSummary().isEmpty()) {
+            Paragraph summaryHead = new Paragraph("SUMMARY", minimalSection);
+            summaryHead.setSpacingAfter(8);
+            doc.add(summaryHead);
+            
+            Paragraph summary = new Paragraph(r.getSummary(), normalFont);
+            summary.setAlignment(Element.ALIGN_JUSTIFIED);
+            summary.setSpacingAfter(15);
+            doc.add(summary);
+        }
+          if (!r.getSkillList().isEmpty()) {
+            Paragraph skillsHead = new Paragraph("SKILLS", minimalSection);
+            skillsHead.setSpacingAfter(8);
+            doc.add(skillsHead);
+            
+            StringBuilder skills = new StringBuilder();
+            for (int i = 0; i < r.getSkillList().size(); i++) {
+                skills.append(r.getSkillList().get(i).getSkillName());
+                if (i < r.getSkillList().size() - 1) skills.append("  •  ");
+            }
+            Paragraph skillsPara = new Paragraph(skills.toString(), normalFont);
+            doc.add(skillsPara);
+            doc.add(Chunk.NEWLINE);
+        }
+
+          if (!r.getEducationList().isEmpty()) {
+            Paragraph eduHead = new Paragraph("EDUCATION", minimalSection);
+            eduHead.setSpacingAfter(8);
+            doc.add(eduHead);
+            
+            for (Education e : r.getEducationList()) {
+                Paragraph degree = new Paragraph(e.getDegree() + "  —  " + e.getUniversity(), boldFont);
+                degree.setSpacingAfter(2);
+                doc.add(degree);
+                
+                Paragraph year = new Paragraph(e.getYear() + "  •  CGPA: " + e.getCgpa(), italicFont);
+                year.setSpacingAfter(12);
+                doc.add(year);
+            }
+            doc.add(Chunk.NEWLINE);
+        }
+        if (!r.getExperienceList().isEmpty()) {
+            Paragraph expHead = new Paragraph("EXPERIENCE", minimalSection);
+            expHead.setSpacingAfter(8);
+            doc.add(expHead);
+            
+            for (Experience e : r.getExperienceList()) {
+                Paragraph role = new Paragraph(e.getRole() + "  —  " + e.getCompany(), boldFont);
+                role.setSpacingAfter(2);
+                doc.add(role);
+                
+                Paragraph duration = new Paragraph(e.getDuration(), italicFont);
+                duration.setSpacingAfter(5);
+                doc.add(duration);
+                
+                Paragraph desc = new Paragraph(e.getDescription(), normalFont);
+                desc.setAlignment(Element.ALIGN_JUSTIFIED);
+                desc.setSpacingAfter(12);
+                doc.add(desc);
+            }
+            doc.add(Chunk.NEWLINE);
+        }
+        
+        if (!r.getEducationList().isEmpty()) {
+            Paragraph eduHead = new Paragraph("EDUCATION", minimalSection);
+            eduHead.setSpacingAfter(8);
+            doc.add(eduHead);
+            
+            for (Education e : r.getEducationList()) {
+                Paragraph degree = new Paragraph(e.getDegree() + "  —  " + e.getUniversity(), boldFont);
+                degree.setSpacingAfter(2);
+                doc.add(degree);
+                
+                Paragraph year = new Paragraph(e.getYear() + "  •  CGPA: " + e.getCgpa(), italicFont);
+                year.setSpacingAfter(12);
+                doc.add(year);
+            }
+            doc.add(Chunk.NEWLINE);
+        }
+        
+        if (!r.getProjectList().isEmpty()) {
+            Paragraph projHead = new Paragraph("PROJECTS", minimalSection);
+            projHead.setSpacingAfter(8);
+            doc.add(projHead);
+            
+            for (Project p : r.getProjectList()) {
+                Paragraph projectTitle = new Paragraph(p.getTitle(), boldFont);
+                projectTitle.setSpacingAfter(5);
+                doc.add(projectTitle);
+                
+                Paragraph projectDesc = new Paragraph(p.getDescription(), normalFont);
+                projectDesc.setAlignment(Element.ALIGN_JUSTIFIED);
+                projectDesc.setSpacingAfter(12);
+                doc.add(projectDesc);
+            }
+            doc.add(Chunk.NEWLINE);
+        }
+
+        addMinimalCustomSections(doc, r, minimalSection, normalFont);
+    }
+
+    // ==================== HELPER METHODS ====================
+
+    private static void addEnhancedSection(Document doc, String title, Font font, Color theme) throws DocumentException {
+        doc.add(Chunk.NEWLINE);
+        Paragraph p = new Paragraph(title, font);
+        p.setSpacingAfter(5);
+        doc.add(p);
+        doc.add(new LineSeparator(2f, 100f, theme, Element.ALIGN_LEFT, -2));
+        doc.add(Chunk.NEWLINE);
+    }
+
+    private static void addModernSection(PdfPCell cell, String title, Font font, Color theme) {
+        Paragraph p = new Paragraph(title, font);
+        p.setSpacingAfter(8);
+        cell.addElement(p);
+        
+        LineSeparator line = new LineSeparator();
+        line.setLineColor(theme);
+        line.setLineWidth(2f);
+        cell.addElement(new Chunk(line));
+        cell.addElement(Chunk.NEWLINE);
+    }
+
+    private static void addCreativeSection(Document doc, String title, Font font, Color theme) throws DocumentException {
+        doc.add(Chunk.NEWLINE);
+        Paragraph p = new Paragraph("▸ " + title, font);
+        p.setSpacingAfter(8);
+        doc.add(p);
+    }
+
+    private static void addCreativeSection(PdfPCell cell, String title, Font font, Color theme) {
+        Paragraph p = new Paragraph("▸ " + title, font);
+        p.setSpacingAfter(8);
+        cell.addElement(p);
+    }
+
+    private static void addClassicCustomSections(Document doc, Resume resume, Font sectionFont, Font normalFont, Color theme)
+            throws DocumentException {
+        List<AbstractCustomSection> customSections = resume.getCustomSections();
+        for (AbstractCustomSection section : customSections) {
+            addEnhancedSection(doc, section.getHeader() + " (" + section.getOccupationName() + ")", sectionFont, theme);
+            addCustomParameters(doc, section, normalFont);
+        }
+    }
+
+    private static void addModernCustomSections(PdfPCell cell, Resume resume, Font sectionFont, Font normalFont, Color theme) {
+        List<AbstractCustomSection> customSections = resume.getCustomSections();
+        for (AbstractCustomSection section : customSections) {
+            addModernSection(cell, section.getHeader() + " (" + section.getOccupationName() + ")", sectionFont, theme);
+            addCustomParameters(cell, section, normalFont);
+        }
+    }
+
+    private static void addCreativeCustomSections(Document doc, Resume resume, Font sectionFont, Font normalFont, Color theme)
+            throws DocumentException {
+        List<AbstractCustomSection> customSections = resume.getCustomSections();
+        for (AbstractCustomSection section : customSections) {
+            addCreativeSection(doc, section.getHeader() + " (" + section.getOccupationName() + ")", sectionFont, theme);
+            addCustomParameters(doc, section, normalFont);
+        }
+    }
+
+    private static void addMinimalCustomSections(Document doc, Resume resume, Font sectionFont, Font normalFont)
+            throws DocumentException {
+        List<AbstractCustomSection> customSections = resume.getCustomSections();
+        for (AbstractCustomSection section : customSections) {
+            Paragraph customHead = new Paragraph(section.getHeader().toUpperCase() + " (" +
+                    section.getOccupationName().toUpperCase() + ")", sectionFont);
+            customHead.setSpacingAfter(8);
+            doc.add(customHead);
+            addCustomParameters(doc, section, normalFont);
+            doc.add(Chunk.NEWLINE);
+        }
+    }
+
+    private static void addCustomParameters(Document doc, AbstractCustomSection section, Font normalFont)
+            throws DocumentException {
+        for (CustomParameter parameter : section.getParameters()) {
+            Paragraph line = new Paragraph(parameter.getName() + " : " + parameter.getValue(), normalFont);
+            line.setSpacingAfter(4);
+            doc.add(line);
+        }
+    }
+
+    private static void addCustomParameters(PdfPCell cell, AbstractCustomSection section, Font normalFont) {
+        for (CustomParameter parameter : section.getParameters()) {
+            Paragraph line = new Paragraph(parameter.getName() + " : " + parameter.getValue(), normalFont);
+            line.setSpacingAfter(4);
+            cell.addElement(line);
+        }
+    }
+
+    // Page Numbers
+    static class PageNumbersInfo extends PdfPageEventHelper {
+        @Override
+        public void onEndPage(PdfWriter writer, Document document) {
+            PdfContentByte cb = writer.getDirectContent();
+            Phrase footer = new Phrase("Page " + writer.getPageNumber(), 
+                FontFactory.getFont(FontFactory.HELVETICA, 9, Font.NORMAL, Color.GRAY));
+            ColumnText.showTextAligned(cb, Element.ALIGN_CENTER, footer, 
+                (document.right() - document.left()) / 2 + document.leftMargin(), 
+                document.bottom() - 10, 0);
+        }
+    }
+}
+===== ./src/com/resumebuilder/backend/customsection/FlexibleCustomSection.java =====
+package com.resumebuilder.backend.customsection;
+
+import com.resumebuilder.backend.exception.CustomSectionException;
+import com.resumebuilder.backend.exception.InvalidInputException;
+
+import java.util.ArrayList;
+import java.util.Scanner;
+
+public class FlexibleCustomSection extends AbstractCustomSection {
+
+    public FlexibleCustomSection(String header, String occupationName) {
+        super(header, occupationName);
+    }
+
+    @Override
+    public void inputParameters(Scanner scanner) throws InvalidInputException, CustomSectionException {
+        parameterList = new ArrayList<>();
+        int parameterCount = readPositiveInt(scanner, "Number of parameters ");
+        for (int i = 0; i < parameterCount; i++) {
+            String name = readRequiredValue(scanner, "Parameter name " + (i + 1) + " ");
+            String value = readRequiredValue(scanner, "Parameter value " + (i + 1) + " ");
+            addParameter(name, value);
+        }
+        validateSection();
+    }
+}
+===== ./src/com/resumebuilder/backend/customsection/AbstractCustomSection.java =====
+package com.resumebuilder.backend.customsection;
+
+import com.resumebuilder.backend.exception.CustomSectionException;
+import com.resumebuilder.backend.exception.InvalidInputException;
+import com.resumebuilder.backend.model.CustomParameter;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
+
+public abstract class AbstractCustomSection {
+    private int id;
+    private int resumeId;
+    private String header;
+    private String occupationName;
+    protected List<CustomParameter> parameterList;
+
+    public AbstractCustomSection() {
+        this.parameterList = new ArrayList<>();
+    }
+
+    public AbstractCustomSection(String header, String occupationName) {
+        this();
+        this.header = header;
+        this.occupationName = occupationName;
+    }
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+
+    public int getResumeId() { return resumeId; }
+    public void setResumeId(int resumeId) { this.resumeId = resumeId; }
+
+    public String getHeader() { return header; }
+    public void setHeader(String header) { this.header = header; }
+    
+    public String getOccupationName() { return occupationName; }
+    public void setOccupationName(String occupationName) { this.occupationName = occupationName; }
+
+    public abstract void inputParameters(Scanner scanner) throws InvalidInputException, CustomSectionException;
+    
+    public void displaySection() {
+        printSection();
+    }
+    
+    public List<CustomParameter> getParameters() {
+        return parameterList;
+    }
+
+    public void setParameters(List<CustomParameter> parameterList) {
+        this.parameterList = new ArrayList<>(parameterList);
+    }
+
+    protected String readRequiredValue(Scanner scanner, String prompt) throws InvalidInputException {
+        System.out.print(prompt);
+        String value = scanner.nextLine().trim();
+        if (value.isEmpty()) {
+            throw new InvalidInputException("Input cannot be empty.");
+        }
+        return value;
+    }
+
+    protected int readPositiveInt(Scanner scanner, String prompt) throws InvalidInputException {
+        System.out.print(prompt);
+        String input = scanner.nextLine().trim();
+        if (input.isEmpty()) {
+            throw new InvalidInputException("Input cannot be empty.");
+        }
+
+        try {
+            int value = Integer.parseInt(input);
+            if (value <= 0) {
+                throw new InvalidInputException("Please enter a number greater than zero.");
+            }
+            return value;
+        } catch (NumberFormatException e) {
+            throw new InvalidInputException("Please enter a valid numeric value.");
+        }
+    }
+
+    protected void addParameter(String name, String value) throws InvalidInputException {
+        if (name == null || name.trim().isEmpty()) {
+            throw new InvalidInputException("Parameter name cannot be empty.");
+        }
+        if (value == null || value.trim().isEmpty()) {
+            throw new InvalidInputException("Parameter value cannot be empty.");
+        }
+        parameterList.add(new CustomParameter(name.trim(), value.trim()));
+    }
+
+    protected void validateSection() throws CustomSectionException {
+        if (header == null || header.trim().isEmpty()) {
+            throw new CustomSectionException("Section header cannot be empty.");
+        }
+        if (occupationName == null || occupationName.trim().isEmpty()) {
+            throw new CustomSectionException("Occupation name cannot be empty.");
+        }
+        if (getParameters() == null || getParameters().isEmpty()) {
+            throw new CustomSectionException("Custom section must contain at least one parameter.");
+        }
+    }
+
+    protected void printSection() {
+        System.out.println("\n" + getHeader() + " [" + getOccupationName() + "]");
+        for (CustomParameter parameter : getParameters()) {
+            System.out.println("  " + parameter.getName() + " : " + parameter.getValue());
+        }
+    }
+}
+===== ./src/com/resumebuilder/backend/customsection/PresetCustomSection.java =====
+package com.resumebuilder.backend.customsection;
+
+import com.resumebuilder.backend.exception.CustomSectionException;
+import com.resumebuilder.backend.exception.InvalidInputException;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Scanner;
+
+public class PresetCustomSection extends AbstractCustomSection {
+    private static final String DEVELOPER = "Developer";
+    private static final String DESIGNER = "Designer";
+    private static final String RESEARCHER = "Researcher";
+    private static final String CUSTOM = "Custom";
+
+    private final String[] fieldNames;
+
+    public PresetCustomSection(String header, String occupationName, String[] fieldNames) {
+        super(header, normalizeOccupationName(occupationName));
+        this.fieldNames = fieldNames != null ? fieldNames.clone() : new String[0];
+    }
+
+    public static List<String> getOccupationOptions() {
+        return Arrays.asList(DEVELOPER, DESIGNER, RESEARCHER, CUSTOM);
+    }
+
+    public static String[] getFieldNamesForOccupation(String occupationName) {
+        if (DEVELOPER.equalsIgnoreCase(occupationName)) {
+            return new String[]{"GitHub", "Tech Stack", "Project Link"};
+        }
+        if (DESIGNER.equalsIgnoreCase(occupationName)) {
+            return new String[]{"Portfolio", "Tools", "Design Type"};
+        }
+        if (RESEARCHER.equalsIgnoreCase(occupationName)) {
+            return new String[]{"Paper Title", "Journal", "Year"};
+        }
+        return null;
+    }
+
+    public static boolean isCustomOption(String occupationName) {
+        return CUSTOM.equalsIgnoreCase(occupationName);
+    }
+
+    private static String normalizeOccupationName(String occupationName) {
+        if (DEVELOPER.equalsIgnoreCase(occupationName)) {
+            return DEVELOPER;
+        }
+        if (DESIGNER.equalsIgnoreCase(occupationName)) {
+            return DESIGNER;
+        }
+        if (RESEARCHER.equalsIgnoreCase(occupationName)) {
+            return RESEARCHER;
+        }
+        return occupationName;
+    }
+
+    @Override
+    public void inputParameters(Scanner scanner) throws InvalidInputException, CustomSectionException {
+        parameterList = new ArrayList<>();
+        for (String fieldName : fieldNames) {
+            addParameter(fieldName, readRequiredValue(scanner, fieldName + " "));
+        }
+        validateSection();
+    }
+}
+===== ./src/com/resumebuilder/backend/util/DatabaseConnection.java =====
+package com.resumebuilder.backend.util;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public class DatabaseConnection {
+    private static final String URL = "jdbc:mysql://localhost:3306/resume_builder_db";
+    private static final String USER = "root";
+    private static final String PASSWORD = ""; // Default XAMPP password is empty
+
+    public static Connection getConnection() throws SQLException {
+        try {
+            // Load Driver explicitly for older environments, though often auto-loaded in newer JDBC
+            Class.forName("com.mysql.cj.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            System.err.println("MySQL Driver not found! Add the connector jar to classpath.");
+            e.printStackTrace();
+        }
+        return DriverManager.getConnection(URL, USER, PASSWORD);
+    }
+    
+    // Test connection
+    public static void main(String[] args) {
+        try (Connection conn = getConnection()) {
+            if (conn != null) {
+                System.out.println("Connected to the database successfully!");
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to connect to database: " + e.getMessage());
+        }
+    }
+}
+===== ./src/com/resumebuilder/backend/dao/UserDAO.java =====
+package com.resumebuilder.backend.dao;
+
+import com.resumebuilder.backend.model.User;
+import com.resumebuilder.backend.util.DatabaseConnection;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+
+public class UserDAO {
+    
+    public boolean register(User user) {
+        String sql = "INSERT INTO users (username, password) VALUES (?, ?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            
+            stmt.setString(1, user.getUsername());
+            stmt.setString(2, user.getPassword());
+            
+            int affectedRows = stmt.executeUpdate();
+            if (affectedRows > 0) {
+                try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        user.setId(generatedKeys.getInt(1));
+                    }
+                }
+                return true;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public User login(String username, String password) {
+        String sql = "SELECT * FROM users WHERE username = ? AND password = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, username);
+            stmt.setString(2, password);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return new User(
+                        rs.getInt("id"),
+                        rs.getString("username"),
+                        rs.getString("password")
+                    );
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null; // Login failed
+    }
+}
+===== ./src/com/resumebuilder/backend/dao/ResumeDAO.java =====
+package com.resumebuilder.backend.dao;
+
+import com.resumebuilder.backend.customsection.AbstractCustomSection;
+import com.resumebuilder.backend.customsection.FlexibleCustomSection;
+import com.resumebuilder.backend.customsection.PresetCustomSection;
+import com.resumebuilder.backend.exception.DatabaseException;
+import com.resumebuilder.backend.exception.ResumeNotFoundException;
+import com.resumebuilder.backend.model.CustomParameter;
+import com.resumebuilder.backend.model.Education;
+import com.resumebuilder.backend.model.Experience;
+import com.resumebuilder.backend.model.Project;
+import com.resumebuilder.backend.model.Resume;
+import com.resumebuilder.backend.model.Skill;
+import com.resumebuilder.backend.util.DatabaseConnection;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ResumeDAO {
+
+    public void save(Resume resume) throws SQLException {
+        try {
+            saveResume(resume);
+        } catch (DatabaseException | ResumeNotFoundException e) {
+            throw new SQLException(e.getMessage(), e);
+        }
+    }
+
+    public void saveResume(Resume resume) throws DatabaseException, ResumeNotFoundException {
+        Connection conn = null;
+        try {
+            conn = DatabaseConnection.getConnection();
+            ensureCustomSectionTables(conn);
+            conn.setAutoCommit(false);
+
+            if (resume.getId() == 0) {
+                insertResume(conn, resume);
+            } else {
+                if (!resumeExists(conn, resume.getId())) {
+                    throw new ResumeNotFoundException("Resume not found for update.");
+                }
+                updateResume(conn, resume);
+                deleteChildRecords(conn, resume.getId());
+            }
+
+            insertEducation(conn, resume);
+            insertExperience(conn, resume);
+            insertProjects(conn, resume);
+            insertSkills(conn, resume);
+            insertCustomSections(conn, resume);
+
+            conn.commit();
+        } catch (SQLException e) {
+            rollbackQuietly(conn);
+            throw new DatabaseException("Failed to save resume data.", e);
+        } finally {
+            resetAutoCommitQuietly(conn);
+            closeQuietly(conn);
+        }
+    }
+
+    public List<Resume> getResumesByUserId(int userId) {
+        try {
+            return getResumesByUserIdOrThrow(userId);
+        } catch (DatabaseException e) {
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+
+    public List<Resume> getResumesByUserIdOrThrow(int userId) throws DatabaseException {
+        List<Resume> resumes = new ArrayList<>();
+        String sql = "SELECT * FROM resumes WHERE user_id = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, userId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Resume resume = new Resume();
+                    populateResumeBasicInfo(resume, rs);
+                    resumes.add(resume);
+                }
+            }
+            return resumes;
+        } catch (SQLException e) {
+            throw new DatabaseException("Failed to fetch resumes for the user.", e);
+        }
+    }
+
+    public Resume getResumeById(int resumeId) {
+        try {
+            return getResumeByIdOrThrow(resumeId);
+        } catch (DatabaseException | ResumeNotFoundException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public Resume getResumeByIdOrThrow(int resumeId) throws DatabaseException, ResumeNotFoundException {
+        String sql = "SELECT * FROM resumes WHERE id = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            ensureCustomSectionTables(conn);
+
+            stmt.setInt(1, resumeId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    throw new ResumeNotFoundException("Resume not found.");
+                }
+
+                Resume resume = new Resume();
+                populateResumeBasicInfo(resume, rs);
+                resume.setEducationList(getEducation(conn, resumeId));
+                resume.setExperienceList(getExperience(conn, resumeId));
+                resume.setProjectList(getProjects(conn, resumeId));
+                resume.setSkillList(getSkills(conn, resumeId));
+                resume.setCustomSections(getCustomSections(conn, resumeId));
+                return resume;
+            }
+        } catch (SQLException e) {
+            throw new DatabaseException("Failed to fetch resume details.", e);
+        }
+    }
+
+    public boolean deleteResume(int resumeId) {
+        try {
+            return deleteResumeOrThrow(resumeId);
+        } catch (DatabaseException | ResumeNotFoundException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public boolean deleteResumeOrThrow(int resumeId) throws DatabaseException, ResumeNotFoundException {
+        String sql = "DELETE FROM resumes WHERE id = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            if (!resumeExists(conn, resumeId)) {
+                throw new ResumeNotFoundException("Resume not found for deletion.");
+            }
+
+            stmt.setInt(1, resumeId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            throw new DatabaseException("Failed to delete resume.", e);
+        }
+    }
+
+    public void insertCustomSection(AbstractCustomSection section) throws DatabaseException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            ensureCustomSectionTables(conn);
+            insertCustomSection(conn, section);
+            insertCustomParameters(conn, section.getParameters(), section.getId());
+        } catch (SQLException e) {
+            throw new DatabaseException("Failed to insert custom section.", e);
+        }
+    }
+
+    public void insertCustomParameters(List<CustomParameter> parameterList) throws DatabaseException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            ensureCustomSectionTables(conn);
+            insertCustomParameters(conn, parameterList, 0);
+        } catch (SQLException e) {
+            throw new DatabaseException("Failed to insert custom parameters.", e);
+        }
+    }
+
+    public List<AbstractCustomSection> getCustomSections(int resumeId) throws DatabaseException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            ensureCustomSectionTables(conn);
+            return getCustomSections(conn, resumeId);
+        } catch (SQLException e) {
+            throw new DatabaseException("Failed to load custom sections.", e);
+        }
+    }
+
+    public List<CustomParameter> getCustomParameters(int sectionId) throws DatabaseException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            ensureCustomSectionTables(conn);
+            return getCustomParameters(conn, sectionId);
+        } catch (SQLException e) {
+            throw new DatabaseException("Failed to load custom parameters.", e);
+        }
+    }
+
+    private void insertResume(Connection conn, Resume resume) throws SQLException {
+        String sql = "INSERT INTO resumes (user_id, title, template_name, color_theme, " +
+                     "full_name, email, phone, address, summary, photo_path) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            stmt.setInt(1, resume.getUserId());
+            stmt.setString(2, resume.getTitle());
+            stmt.setString(3, resume.getTemplateName());
+            stmt.setString(4, resume.getColorTheme());
+            stmt.setString(5, resume.getFullName());
+            stmt.setString(6, resume.getEmail());
+            stmt.setString(7, resume.getPhone());
+            stmt.setString(8, resume.getAddress());
+            stmt.setString(9, resume.getSummary());
+            stmt.setString(10, resume.getPhotoPath());
+
+            stmt.executeUpdate();
+
+            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    resume.setId(generatedKeys.getInt(1));
+                }
+            }
+        }
+    }
+
+    private void updateResume(Connection conn, Resume resume) throws SQLException {
+        String sql = "UPDATE resumes SET title=?, template_name=?, color_theme=?, " +
+                     "full_name=?, email=?, phone=?, address=?, summary=?, photo_path=? " +
+                     "WHERE id=?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, resume.getTitle());
+            stmt.setString(2, resume.getTemplateName());
+            stmt.setString(3, resume.getColorTheme());
+            stmt.setString(4, resume.getFullName());
+            stmt.setString(5, resume.getEmail());
+            stmt.setString(6, resume.getPhone());
+            stmt.setString(7, resume.getAddress());
+            stmt.setString(8, resume.getSummary());
+            stmt.setString(9, resume.getPhotoPath());
+            stmt.setInt(10, resume.getId());
+            stmt.executeUpdate();
+        }
+    }
+
+    private boolean resumeExists(Connection conn, int resumeId) throws SQLException {
+        String sql = "SELECT id FROM resumes WHERE id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, resumeId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private void deleteChildRecords(Connection conn, int resumeId) throws SQLException {
+        String[] statements = {
+            "DELETE FROM education WHERE resume_id = ?",
+            "DELETE FROM experience WHERE resume_id = ?",
+            "DELETE FROM projects WHERE resume_id = ?",
+            "DELETE FROM skills WHERE resume_id = ?",
+            "DELETE FROM custom_section WHERE resume_id = ?"
+        };
+
+        for (String sql : statements) {
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setInt(1, resumeId);
+                stmt.executeUpdate();
+            }
+        }
+    }
+
+    private void insertEducation(Connection conn, Resume resume) throws SQLException {
+        if (resume.getEducationList().isEmpty()) return;
+
+        String sql = "INSERT INTO education (resume_id, degree, university, year, cgpa) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (Education education : resume.getEducationList()) {
+                stmt.setInt(1, resume.getId());
+                stmt.setString(2, education.getDegree());
+                stmt.setString(3, education.getUniversity());
+                stmt.setString(4, education.getYear());
+                stmt.setString(5, education.getCgpa());
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+        }
+    }
+
+    private void insertExperience(Connection conn, Resume resume) throws SQLException {
+        if (resume.getExperienceList().isEmpty()) return;
+
+        String sql = "INSERT INTO experience (resume_id, company, role, duration, description) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (Experience experience : resume.getExperienceList()) {
+                stmt.setInt(1, resume.getId());
+                stmt.setString(2, experience.getCompany());
+                stmt.setString(3, experience.getRole());
+                stmt.setString(4, experience.getDuration());
+                stmt.setString(5, experience.getDescription());
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+        }
+    }
+
+    private void insertProjects(Connection conn, Resume resume) throws SQLException {
+        if (resume.getProjectList().isEmpty()) return;
+
+        String sql = "INSERT INTO projects (resume_id, title, description) VALUES (?, ?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (Project project : resume.getProjectList()) {
+                stmt.setInt(1, resume.getId());
+                stmt.setString(2, project.getTitle());
+                stmt.setString(3, project.getDescription());
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+        }
+    }
+
+    private void insertSkills(Connection conn, Resume resume) throws SQLException {
+        if (resume.getSkillList().isEmpty()) return;
+
+        String sql = "INSERT INTO skills (resume_id, skill_name) VALUES (?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (Skill skill : resume.getSkillList()) {
+                stmt.setInt(1, resume.getId());
+                stmt.setString(2, skill.getSkillName());
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+        }
+    }
+
+    private void insertCustomSections(Connection conn, Resume resume) throws SQLException {
+        List<AbstractCustomSection> sections = resume.getCustomSections();
+        if (sections.isEmpty()) return;
+
+        for (AbstractCustomSection section : sections) {
+            section.setResumeId(resume.getId());
+            insertCustomSection(conn, section);
+            insertCustomParameters(conn, section.getParameters(), section.getId());
+        }
+    }
+
+    private void insertCustomSection(Connection conn, AbstractCustomSection section) throws SQLException {
+        String sql = "INSERT INTO custom_section (resume_id, header, occupation) VALUES (?, ?, ?)";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            stmt.setInt(1, section.getResumeId());
+            stmt.setString(2, section.getHeader());
+            stmt.setString(3, section.getOccupationName());
+            stmt.executeUpdate();
+
+            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    section.setId(generatedKeys.getInt(1));
+                }
+            }
+        }
+    }
+
+    private void insertCustomParameters(Connection conn, List<CustomParameter> parameterList, int fallbackSectionId) throws SQLException {
+        if (parameterList == null || parameterList.isEmpty()) return;
+
+        String sql = "INSERT INTO custom_parameter (section_id, name, value) VALUES (?, ?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            for (CustomParameter parameter : parameterList) {
+                int sectionId = fallbackSectionId != 0 ? fallbackSectionId : parameter.getSectionId();
+                if (sectionId == 0) {
+                    throw new SQLException("Custom parameter is missing a valid section id.");
+                }
+                parameter.setSectionId(sectionId);
+                stmt.setInt(1, sectionId);
+                stmt.setString(2, parameter.getName());
+                stmt.setString(3, parameter.getValue());
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+        }
+    }
+
+    private void populateResumeBasicInfo(Resume resume, ResultSet rs) throws SQLException {
+        resume.setId(rs.getInt("id"));
+        resume.setUserId(rs.getInt("user_id"));
+        resume.setTitle(rs.getString("title"));
+        resume.setTemplateName(rs.getString("template_name"));
+        resume.setColorTheme(rs.getString("color_theme"));
+        resume.setFullName(rs.getString("full_name"));
+        resume.setEmail(rs.getString("email"));
+        resume.setPhone(rs.getString("phone"));
+        resume.setAddress(rs.getString("address"));
+        resume.setSummary(rs.getString("summary"));
+        resume.setPhotoPath(rs.getString("photo_path"));
+    }
+
+    private List<Education> getEducation(Connection conn, int resumeId) throws SQLException {
+        List<Education> list = new ArrayList<>();
+        String sql = "SELECT * FROM education WHERE resume_id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, resumeId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Education education = new Education(rs.getString("degree"), rs.getString("university"),
+                            rs.getString("year"), rs.getString("cgpa"));
+                    education.setId(rs.getInt("id"));
+                    education.setResumeId(resumeId);
+                    list.add(education);
+                }
+            }
+        }
+        return list;
+    }
+
+    private List<Experience> getExperience(Connection conn, int resumeId) throws SQLException {
+        List<Experience> list = new ArrayList<>();
+        String sql = "SELECT * FROM experience WHERE resume_id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, resumeId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Experience experience = new Experience(rs.getString("company"), rs.getString("role"),
+                            rs.getString("duration"), rs.getString("description"));
+                    experience.setId(rs.getInt("id"));
+                    experience.setResumeId(resumeId);
+                    list.add(experience);
+                }
+            }
+        }
+        return list;
+    }
+
+    private List<Project> getProjects(Connection conn, int resumeId) throws SQLException {
+        List<Project> list = new ArrayList<>();
+        String sql = "SELECT * FROM projects WHERE resume_id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, resumeId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Project project = new Project(rs.getString("title"), rs.getString("description"));
+                    project.setId(rs.getInt("id"));
+                    project.setResumeId(resumeId);
+                    list.add(project);
+                }
+            }
+        }
+        return list;
+    }
+
+    private List<Skill> getSkills(Connection conn, int resumeId) throws SQLException {
+        List<Skill> list = new ArrayList<>();
+        String sql = "SELECT * FROM skills WHERE resume_id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, resumeId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Skill skill = new Skill(rs.getString("skill_name"));
+                    skill.setId(rs.getInt("id"));
+                    skill.setResumeId(resumeId);
+                    list.add(skill);
+                }
+            }
+        }
+        return list;
+    }
+
+    private List<AbstractCustomSection> getCustomSections(Connection conn, int resumeId) throws SQLException {
+        List<AbstractCustomSection> list = new ArrayList<>();
+        String sql = "SELECT * FROM custom_section WHERE resume_id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, resumeId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    String header = rs.getString("header");
+                    String occupation = rs.getString("occupation");
+                    AbstractCustomSection section = createSection(occupation, header);
+                    section.setId(rs.getInt("id"));
+                    section.setResumeId(resumeId);
+                    section.setParameters(getCustomParameters(conn, section.getId()));
+                    list.add(section);
+                }
+            }
+        }
+        return list;
+    }
+
+    private List<CustomParameter> getCustomParameters(Connection conn, int sectionId) throws SQLException {
+        List<CustomParameter> list = new ArrayList<>();
+        String sql = "SELECT * FROM custom_parameter WHERE section_id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, sectionId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    CustomParameter parameter = new CustomParameter(
+                            rs.getInt("id"),
+                            rs.getInt("section_id"),
+                            rs.getString("name"),
+                            rs.getString("value")
+                    );
+                    list.add(parameter);
+                }
+            }
+        }
+        return list;
+    }
+
+    private AbstractCustomSection createSection(String occupationName, String header) {
+        String[] fieldNames = PresetCustomSection.getFieldNamesForOccupation(occupationName);
+        if (fieldNames != null) {
+            return new PresetCustomSection(header, occupationName, fieldNames);
+        }
+        return new FlexibleCustomSection(header, occupationName);
+    }
+
+    private void ensureCustomSectionTables(Connection conn) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(
+                    "CREATE TABLE IF NOT EXISTS custom_section (" +
+                    "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                    "resume_id INT NOT NULL, " +
+                    "header VARCHAR(150) NOT NULL, " +
+                    "occupation VARCHAR(100) NOT NULL, " +
+                    "FOREIGN KEY (resume_id) REFERENCES resumes(id) ON DELETE CASCADE" +
+                    ")"
+            );
+
+            stmt.executeUpdate(
+                    "CREATE TABLE IF NOT EXISTS custom_parameter (" +
+                    "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                    "section_id INT NOT NULL, " +
+                    "name VARCHAR(150) NOT NULL, " +
+                    "value TEXT NOT NULL, " +
+                    "FOREIGN KEY (section_id) REFERENCES custom_section(id) ON DELETE CASCADE" +
+                    ")"
+            );
+        }
+    }
+
+    private void rollbackQuietly(Connection conn) {
+        if (conn == null) return;
+
+        try {
+            conn.rollback();
+        } catch (SQLException ignored) {
+        }
+    }
+
+    private void resetAutoCommitQuietly(Connection conn) {
+        if (conn == null) return;
+
+        try {
+            conn.setAutoCommit(true);
+        } catch (SQLException ignored) {
+        }
+    }
+
+    private void closeQuietly(Connection conn) {
+        if (conn == null) return;
+
+        try {
+            conn.close();
+        } catch (SQLException ignored) {
+        }
+    }
+}
+===== ./src/com/resumebuilder/backend/model/Skill.java =====
+package com.resumebuilder.backend.model;
+
+public class Skill {
+    private int id;
+    private int resumeId;
+    private String skillName;
+
+    public Skill() {}
+
+    public Skill(String skillName) {
+        this.skillName = skillName;
+    }
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+    
+    public int getResumeId() { return resumeId; }
+    public void setResumeId(int resumeId) { this.resumeId = resumeId; }
+    
+    public String getSkillName() { return skillName; }
+    public void setSkillName(String skillName) { this.skillName = skillName; }
+}
+===== ./src/com/resumebuilder/backend/model/Resume.java =====
+package com.resumebuilder.backend.model;
+
+import com.resumebuilder.backend.customsection.AbstractCustomSection;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class Resume {
+    private int id;
+    private int userId;
+    private String title;
+    private String templateName;
+    private String colorTheme;
+    
+    // Personal Info
+    private String fullName;
+    private String email;
+    private String phone;
+    private String address;
+    private String summary;
+    private String photoPath;
+    
+    // Child Sections
+    private List<Education> educationList;
+    private List<Experience> experienceList;
+    private List<Project> projectList;
+    private List<Skill> skillList;
+    private List<AbstractCustomSection> customSections;
+
+    public Resume() {
+        this.educationList = new ArrayList<>();
+        this.experienceList = new ArrayList<>();
+        this.projectList = new ArrayList<>();
+        this.skillList = new ArrayList<>();
+        this.customSections = new ArrayList<>();
+        // Defaults
+        this.title = "My Resume";
+        this.templateName = "Classic";
+        this.colorTheme = "Blue";
+    }
+
+    // Getters and Setters
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+    
+    public int getUserId() { return userId; }
+    public void setUserId(int userId) { this.userId = userId; }
+    
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    
+    public String getTemplateName() { return templateName; }
+    public void setTemplateName(String templateName) { this.templateName = templateName; }
+    
+    public String getColorTheme() { return colorTheme; }
+    public void setColorTheme(String colorTheme) { this.colorTheme = colorTheme; }
+    
+    public String getFullName() { return fullName; }
+    public void setFullName(String fullName) { this.fullName = fullName; }
+    
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+    
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+    
+    public String getSummary() { return summary; }
+    public void setSummary(String summary) { this.summary = summary; }
+    
+    public String getPhotoPath() { return photoPath; }
+    public void setPhotoPath(String photoPath) { this.photoPath = photoPath; }
+    
+    public List<Education> getEducationList() { return educationList; }
+    public void setEducationList(List<Education> educationList) { this.educationList = educationList; }
+    
+    public List<Experience> getExperienceList() { return experienceList; }
+    public void setExperienceList(List<Experience> experienceList) { this.experienceList = experienceList; }
+    
+    public List<Project> getProjectList() { return projectList; }
+    public void setProjectList(List<Project> projectList) { this.projectList = projectList; }
+    
+    public List<Skill> getSkillList() { return skillList; }
+    public void setSkillList(List<Skill> skillList) { this.skillList = skillList; }
+    
+    public List<AbstractCustomSection> getCustomSections() { return customSections; }
+    public void setCustomSections(List<AbstractCustomSection> customSections) {
+        this.customSections = customSections != null ? customSections : new ArrayList<AbstractCustomSection>();
+    }
+}
+===== ./src/com/resumebuilder/backend/model/User.java =====
+package com.resumebuilder.backend.model;
+
+public class User {
+    private int id;
+    private String username;
+    private String password;
+
+    public User() {}
+
+    public User(int id, String username, String password) {
+        this.id = id;
+        this.username = username;
+        this.password = password;
+    }
+
+    public User(String username, String password) {
+        this.username = username;
+        this.password = password;
+    }
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+}
+===== ./src/com/resumebuilder/backend/model/CustomParameter.java =====
+package com.resumebuilder.backend.model;
+
+public class CustomParameter {
+    private int id;
+    private int sectionId;
+    private String name;
+    private String value;
+
+    public CustomParameter() {}
+
+    public CustomParameter(String name, String value) {
+        this.name = name;
+        this.value = value;
+    }
+
+    public CustomParameter(int id, int sectionId, String name, String value) {
+        this.id = id;
+        this.sectionId = sectionId;
+        this.name = name;
+        this.value = value;
+    }
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+
+    public int getSectionId() { return sectionId; }
+    public void setSectionId(int sectionId) { this.sectionId = sectionId; }
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public String getValue() { return value; }
+    public void setValue(String value) { this.value = value; }
+}
+===== ./src/com/resumebuilder/backend/model/Experience.java =====
+package com.resumebuilder.backend.model;
+
+public class Experience {
+    private int id;
+    private int resumeId;
+    private String company;
+    private String role;
+    private String duration;
+    private String description;
+
+    public Experience() {}
+
+    public Experience(String company, String role, String duration, String description) {
+        this.company = company;
+        this.role = role;
+        this.duration = duration;
+        this.description = description;
+    }
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+    
+    public int getResumeId() { return resumeId; }
+    public void setResumeId(int resumeId) { this.resumeId = resumeId; }
+    
+    public String getCompany() { return company; }
+    public void setCompany(String company) { this.company = company; }
+    
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+    
+    public String getDuration() { return duration; }
+    public void setDuration(String duration) { this.duration = duration; }
+    
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+}
+===== ./src/com/resumebuilder/backend/model/Education.java =====
+package com.resumebuilder.backend.model;
+
+public class Education {
+    private int id;
+    private int resumeId;
+    private String degree;
+    private String university;
+    private String year;
+    private String cgpa;
+
+    public Education() {}
+
+    public Education(String degree, String university, String year, String cgpa) {
+        this.degree = degree;
+        this.university = university;
+        this.year = year;
+        this.cgpa = cgpa;
+    }
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+    
+    public int getResumeId() { return resumeId; }
+    public void setResumeId(int resumeId) { this.resumeId = resumeId; }
+    
+    public String getDegree() { return degree; }
+    public void setDegree(String degree) { this.degree = degree; }
+    
+    public String getUniversity() { return university; }
+    public void setUniversity(String university) { this.university = university; }
+    
+    public String getYear() { return year; }
+    public void setYear(String year) { this.year = year; }
+    
+    public String getCgpa() { return cgpa; }
+    public void setCgpa(String cgpa) { this.cgpa = cgpa; }
+}
+===== ./src/com/resumebuilder/backend/model/Project.java =====
+package com.resumebuilder.backend.model;
+
+public class Project {
+    private int id;
+    private int resumeId;
+    private String title;
+    private String description;
+
+    public Project() {}
+
+    public Project(String title, String description) {
+        this.title = title;
+        this.description = description;
+    }
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+    
+    public int getResumeId() { return resumeId; }
+    public void setResumeId(int resumeId) { this.resumeId = resumeId; }
+    
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+}
+===== ./src/com/resumebuilder/backend/exception/DatabaseException.java =====
+package com.resumebuilder.backend.exception;
+
+public class DatabaseException extends Exception {
+    public DatabaseException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+===== ./src/com/resumebuilder/backend/exception/CustomSectionException.java =====
+package com.resumebuilder.backend.exception;
+
+public class CustomSectionException extends Exception {
+    public CustomSectionException(String message) {
+        super(message);
+    }
+}
+===== ./src/com/resumebuilder/backend/exception/InvalidInputException.java =====
+package com.resumebuilder.backend.exception;
+
+public class InvalidInputException extends Exception {
+    public InvalidInputException(String message) {
+        super(message);
+    }
+}
+===== ./src/com/resumebuilder/backend/exception/ResumeNotFoundException.java =====
+package com.resumebuilder.backend.exception;
+
+public class ResumeNotFoundException extends Exception {
+    public ResumeNotFoundException(String message) {
+        super(message);
+    }
+}
+===== ./src/com/resumebuilder/cli/ResumeEditorScreen.java =====
+package com.resumebuilder.cli;
+
+import com.resumebuilder.backend.customsection.AbstractCustomSection;
+import com.resumebuilder.backend.customsection.FlexibleCustomSection;
+import com.resumebuilder.backend.dao.ResumeDAO;
+import com.resumebuilder.backend.exception.CustomSectionException;
+import com.resumebuilder.backend.exception.DatabaseException;
+import com.resumebuilder.backend.exception.InvalidInputException;
+import com.resumebuilder.backend.exception.ResumeNotFoundException;
+import com.resumebuilder.backend.model.Education;
+import com.resumebuilder.backend.model.Experience;
+import com.resumebuilder.backend.model.Project;
+import com.resumebuilder.backend.model.Resume;
+import com.resumebuilder.backend.model.Skill;
+
+import java.util.List;
+import java.util.Scanner;
+
+public class ResumeEditorScreen {
+    private final Resume resume;
+    private final ResumeDAO resumeDAO;
+    private final Scanner scanner;
+    private boolean isNewResume;
+
+    public ResumeEditorScreen(Resume resume, ResumeDAO resumeDAO) {
+        this.resume = resume;
+        this.resumeDAO = resumeDAO;
+        this.scanner = new Scanner(System.in);
+        this.isNewResume = (resume.getId() == 0);
+    }
+
+    public void show() {
+        while (true) {
+            System.out.println("\nRESUM EDITR\n");
+            System.out.println("Curent Resum " + (resume.getTitle() != null ? resume.getTitle() : "Untitld"));
+            System.out.println("Template " + resume.getTemplateName() + " Theme " + resume.getColorTheme());
+
+            System.out.println("\nSECTIONS");
+            System.out.println("  [1] Personl Informaton");
+            System.out.println("  [2] Summry");
+            System.out.println("  [3] Educaton " + resume.getEducationList().size() + " entris");
+            System.out.println("  [4] Experince " + resume.getExperienceList().size() + " entris");
+            System.out.println("  [5] Projcts " + resume.getProjectList().size() + " entris");
+            System.out.println("  [6] Skills " + resume.getSkillList().size() + " entries");
+            System.out.println("  [7] Templat and Them");
+            System.out.println("  [8] Custom Section " + resume.getCustomSections().size() + " entris");
+            System.out.println("  [S] Sav and Return");
+            System.out.println("  [Q] Discard and Return\n");
+
+            System.out.print("Choose section to edit ");
+            String choice = scanner.nextLine().toLowerCase().trim();
+
+            switch (choice) {
+                case "1":
+                    editPersonalInfo();
+                    break;
+                case "2":
+                    editSummary();
+                    break;
+                case "3":
+                    editEducation();
+                    break;
+                case "4":
+                    editExperience();
+                    break;
+                case "5":
+                    editProjects();
+                    break;
+                case "6":
+                    editSkills();
+                    break;
+                case "7":
+                    editTemplateAndTheme();
+                    break;
+                case "8":
+                    editCustomSections();
+                    break;
+                case "s":
+                    if (saveResume()) {
+                        return;
+                    }
+                    break;
+                case "q":
+                    System.out.print("Discard all changs y/n ");
+                    String confirm = scanner.nextLine().toLowerCase().trim();
+                    if (confirm.equals("y") || confirm.equals("yes")) {
+                        return;
+                    }
+                    break;
+                default:
+                    System.out.println("Invalid option");
+            }
+        }
+    }
+
+    private void editPersonalInfo() {
+        System.out.println("\nPERSONL INFORMATON\n");
+        System.out.println("Leave blank to keep current value\n");
+
+        System.out.print("Full Name [" + orEmpty(resume.getFullName()) + "] ");
+        String fullName = scanner.nextLine().trim();
+        if (!fullName.isEmpty()) resume.setFullName(fullName);
+
+        System.out.print("Email [" + orEmpty(resume.getEmail()) + "] ");
+        String email = scanner.nextLine().trim();
+        if (!email.isEmpty()) resume.setEmail(email);
+
+        System.out.print("Phone [" + orEmpty(resume.getPhone()) + "] ");
+        String phone = scanner.nextLine().trim();
+        if (!phone.isEmpty()) resume.setPhone(phone);
+
+        System.out.print("Address [" + orEmpty(resume.getAddress()) + "] ");
+        String address = scanner.nextLine().trim();
+        if (!address.isEmpty()) resume.setAddress(address);
+
+        System.out.println("Personl informaton updatd");
+    }
+
+    private void editSummary() {
+        System.out.println("\nPROFESSIONAL SUMMRY\n");
+        System.out.println("Curent summry");
+        System.out.println(orEmpty(resume.getSummary()));
+
+        System.out.println("\nEntr new summry typ END on a new line when don");
+        StringBuilder summary = new StringBuilder();
+        String line;
+        while (!(line = scanner.nextLine()).equals("END")) {
+            if (summary.length() > 0) {
+                summary.append("\n");
+            }
+            summary.append(line);
+        }
+
+        if (summary.length() > 0) {
+            resume.setSummary(summary.toString());
+            System.out.println("Summry updatd");
+        } else {
+            System.out.println("Summry unchangd");
+        }
+    }
+
+    private void editEducation() {
+        while (true) {
+            System.out.println("\nEDUCATION\n");
+
+            List<Education> educationList = resume.getEducationList();
+
+            if (educationList.isEmpty()) {
+                System.out.println("  No education entries");
+            } else {
+                for (int i = 0; i < educationList.size(); i++) {
+                    Education education = educationList.get(i);
+                    System.out.println("  " + (i + 1) + " " + education.getDegree() + " " + education.getUniversity());
+                }
+            }
+
+            System.out.println("\nOtions");
+            System.out.println("  [A] Add Entry");
+            System.out.println("  [E] Edit Entry");
+            System.out.println("  [D] Delete Entry");
+            System.out.println("  [B] Back\n");
+
+            System.out.print("Choose option ");
+            String choice = scanner.nextLine().toLowerCase().trim();
+
+            switch (choice) {
+                case "a":
+                    addEducation();
+                    break;
+                case "e":
+                    editEducationEntry(educationList);
+                    break;
+                case "d":
+                    deleteEducationEntry(educationList);
+                    break;
+                case "b":
+                    return;
+                default:
+                    System.out.println("Invalid option");
+            }
+        }
+    }
+
+    private void addEducation() {
+        System.out.println("\nADD EDUCATION\n");
+
+        System.out.print("Degree or Qualification ");
+        String degree = readNonEmpty();
+
+        System.out.print("University ");
+        String university = readNonEmpty();
+
+        System.out.print("Year for example 2020 to 2024 ");
+        String year = scanner.nextLine().trim();
+
+        System.out.print("CGPA or Grade ");
+        String cgpa = scanner.nextLine().trim();
+
+        Education education = new Education();
+        education.setDegree(degree);
+        education.setUniversity(university);
+        education.setYear(year);
+        education.setCgpa(cgpa);
+
+        resume.getEducationList().add(education);
+        System.out.println("Education entry added");
+    }
+
+    private void editEducationEntry(List<Education> list) {
+        if (list.isEmpty()) {
+            System.out.println("No entries to edit");
+            return;
+        }
+
+        System.out.print("Enter entry number 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        Education education = list.get(index - 1);
+
+        System.out.println("\nEDIT EDUCATION\n");
+        System.out.println("Leave blank to keep current value\n");
+
+        System.out.print("Degree [" + education.getDegree() + "] ");
+        String degree = scanner.nextLine().trim();
+        if (!degree.isEmpty()) education.setDegree(degree);
+
+        System.out.print("University [" + education.getUniversity() + "] ");
+        String university = scanner.nextLine().trim();
+        if (!university.isEmpty()) education.setUniversity(university);
+
+        System.out.print("Year [" + orEmpty(education.getYear()) + "] ");
+        String year = scanner.nextLine().trim();
+        if (!year.isEmpty()) education.setYear(year);
+
+        System.out.print("CGPA [" + orEmpty(education.getCgpa()) + "] ");
+        String cgpa = scanner.nextLine().trim();
+        if (!cgpa.isEmpty()) education.setCgpa(cgpa);
+
+        System.out.println("Entry updatd");
+    }
+
+    private void deleteEducationEntry(List<Education> list) {
+        if (list.isEmpty()) {
+            System.out.println("No entries to delete");
+            return;
+        }
+
+        System.out.print("Enter entry number to delete 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        list.remove(index - 1);
+        System.out.println("Entry deletd");
+    }
+
+    private void editExperience() {
+        while (true) {
+            System.out.println("\nEXPERIENCE\n");
+
+            List<Experience> experienceList = resume.getExperienceList();
+
+            if (experienceList.isEmpty()) {
+                System.out.println("  No experience entries");
+            } else {
+                for (int i = 0; i < experienceList.size(); i++) {
+                    Experience experience = experienceList.get(i);
+                    System.out.println("  " + (i + 1) + " " + experience.getRole() + " " + experience.getCompany());
+                }
+            }
+
+            System.out.println("\nOptions");
+            System.out.println("  [A] Add Entry");
+            System.out.println("  [E] Edit Entry");
+            System.out.println("  [D] Delete Entry");
+            System.out.println("  [B] Back\n");
+
+            System.out.print("Choose option ");
+            String choice = scanner.nextLine().toLowerCase().trim();
+
+            switch (choice) {
+                case "a":
+                    addExperience();
+                    break;
+                case "e":
+                    editExperienceEntry(experienceList);
+                    break;
+                case "d":
+                    deleteExperienceEntry(experienceList);
+                    break;
+                case "b":
+                    return;
+                default:
+                    System.out.println("Invalid option");
+            }
+        }
+    }
+
+    private void addExperience() {
+        System.out.println("\nADD EXPERIENCE\n");
+
+        System.out.print("Job Title or Role ");
+        String role = readNonEmpty();
+
+        System.out.print("Company ");
+        String company = readNonEmpty();
+
+        System.out.print("Duration for example Jan 2022 to Present ");
+        String duration = scanner.nextLine().trim();
+
+        System.out.print("Description ");
+        String description = scanner.nextLine().trim();
+
+        Experience experience = new Experience();
+        experience.setRole(role);
+        experience.setCompany(company);
+        experience.setDuration(duration);
+        experience.setDescription(description);
+
+        resume.getExperienceList().add(experience);
+        System.out.println("Experience entry added");
+    }
+
+    private void editExperienceEntry(List<Experience> list) {
+        if (list.isEmpty()) {
+            System.out.println("No entries to edit");
+            return;
+        }
+
+        System.out.print("Enter entry number 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        Experience experience = list.get(index - 1);
+
+        System.out.println("\nEDIT EXPERIENCE\n");
+        System.out.println("Leave blank to keep current value\n");
+
+        System.out.print("Job Title or Role [" + experience.getRole() + "] ");
+        String role = scanner.nextLine().trim();
+        if (!role.isEmpty()) experience.setRole(role);
+
+        System.out.print("Company [" + experience.getCompany() + "] ");
+        String company = scanner.nextLine().trim();
+        if (!company.isEmpty()) experience.setCompany(company);
+
+        System.out.print("Duration [" + orEmpty(experience.getDuration()) + "] ");
+        String duration = scanner.nextLine().trim();
+        if (!duration.isEmpty()) experience.setDuration(duration);
+
+        System.out.print("Description [" + orEmpty(experience.getDescription()) + "] ");
+        String description = scanner.nextLine().trim();
+        if (!description.isEmpty()) experience.setDescription(description);
+
+        System.out.println("Entry updated");
+    }
+
+    private void deleteExperienceEntry(List<Experience> list) {
+        if (list.isEmpty()) {
+            System.out.println("No entries to delete");
+            return;
+        }
+
+        System.out.print("Enter entry number to delete 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        list.remove(index - 1);
+        System.out.println("Entry deleted");
+    }
+
+    private void editProjects() {
+        while (true) {
+            System.out.println("\nPROJECTS\n");
+
+            List<Project> projectList = resume.getProjectList();
+
+            if (projectList.isEmpty()) {
+                System.out.println("  No project entries");
+            } else {
+                for (int i = 0; i < projectList.size(); i++) {
+                    Project project = projectList.get(i);
+                    System.out.println("  " + (i + 1) + " " + project.getTitle());
+                }
+            }
+
+            System.out.println("\nOptions");
+            System.out.println("  [A] Add Entry");
+            System.out.println("  [E] Edit Entry");
+            System.out.println("  [D] Delete Entry");
+            System.out.println("  [B] Back\n");
+
+            System.out.print("Choose option ");
+            String choice = scanner.nextLine().toLowerCase().trim();
+
+            switch (choice) {
+                case "a":
+                    addProject();
+                    break;
+                case "e":
+                    editProjectEntry(projectList);
+                    break;
+                case "d":
+                    deleteProjectEntry(projectList);
+                    break;
+                case "b":
+                    return;
+                default:
+                    System.out.println("Invalid option");
+            }
+        }
+    }
+
+    private void addProject() {
+        System.out.println("\nADD PROJECT\n");
+
+        System.out.print("Project Title ");
+        String title = readNonEmpty();
+
+        System.out.print("Description ");
+        String description = scanner.nextLine().trim();
+
+        Project project = new Project();
+        project.setTitle(title);
+        project.setDescription(description);
+
+        resume.getProjectList().add(project);
+        System.out.println("Project entry added");
+    }
+
+    private void editProjectEntry(List<Project> list) {
+        if (list.isEmpty()) {
+            System.out.println("No entries to edit");
+            return;
+        }
+
+        System.out.print("Enter entry number 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        Project project = list.get(index - 1);
+
+        System.out.println("\nEDIT PROJECT\n");
+        System.out.println("Leave blank to keep current value\n");
+
+        System.out.print("Project Title [" + project.getTitle() + "] ");
+        String title = scanner.nextLine().trim();
+        if (!title.isEmpty()) project.setTitle(title);
+
+        System.out.print("Description [" + orEmpty(project.getDescription()) + "] ");
+        String description = scanner.nextLine().trim();
+        if (!description.isEmpty()) project.setDescription(description);
+
+        System.out.println("Entry updated");
+    }
+
+    private void deleteProjectEntry(List<Project> list) {
+        if (list.isEmpty()) {
+            System.out.println("No entries to delete");
+            return;
+        }
+
+        System.out.print("Enter entry number to delete 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        list.remove(index - 1);
+        System.out.println("Entry deleted");
+    }
+
+    private void editSkills() {
+        while (true) {
+            System.out.println("\nSKILLS\n");
+
+            List<Skill> skillList = resume.getSkillList();
+
+            if (skillList.isEmpty()) {
+                System.out.println("  No skills");
+            } else {
+                for (int i = 0; i < skillList.size(); i++) {
+                    Skill skill = skillList.get(i);
+                    System.out.println("  " + (i + 1) + " " + skill.getSkillName());
+                }
+            }
+
+            System.out.println("\nOptions");
+            System.out.println("  [A] Add Skill");
+            System.out.println("  [E] Edit Skill");
+            System.out.println("  [D] Delete Skill");
+            System.out.println("  [B] Back\n");
+
+            System.out.print("Choose option ");
+            String choice = scanner.nextLine().toLowerCase().trim();
+
+            switch (choice) {
+                case "a":
+                    addSkill();
+                    break;
+                case "e":
+                    editSkillEntry(skillList);
+                    break;
+                case "d":
+                    deleteSkillEntry(skillList);
+                    break;
+                case "b":
+                    return;
+                default:
+                    System.out.println("Invalid option");
+            }
+        }
+    }
+
+    private void addSkill() {
+        System.out.println("\nADD SKILL\n");
+
+        System.out.print("Skill Name ");
+        String name = readNonEmpty();
+
+        Skill skill = new Skill();
+        skill.setSkillName(name);
+
+        resume.getSkillList().add(skill);
+        System.out.println("Skill added");
+    }
+
+    private void editSkillEntry(List<Skill> list) {
+        if (list.isEmpty()) {
+            System.out.println("No skills to edit");
+            return;
+        }
+
+        System.out.print("Enter skill number 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        Skill skill = list.get(index - 1);
+
+        System.out.println("\nEDIT SKILL\n");
+
+        System.out.print("Skill Name [" + skill.getSkillName() + "] ");
+        String name = readNonEmpty();
+        skill.setSkillName(name);
+
+        System.out.println("Skill updatd");
+    }
+
+    private void deleteSkillEntry(List<Skill> list) {
+        if (list.isEmpty()) {
+            System.out.println("No skills to delete");
+            return;
+        }
+
+        System.out.print("Enter skill number to delete 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        list.remove(index - 1);
+        System.out.println("Skill deleted");
+    }
+
+    private void editTemplateAndTheme() {
+        System.out.println("\nTEMPLATE AND THEME\n");
+
+        String[] templates = {"Classic", "Modern", "Creative", "Minimal"};
+        System.out.println("Select Template");
+        for (int i = 0; i < templates.length; i++) {
+            System.out.println((i + 1) + " " + templates[i]);
+        }
+        System.out.print("\nChoose an option ");
+        int templateChoice = readInt(1, templates.length);
+        resume.setTemplateName(templates[templateChoice - 1]);
+
+        String[] themes = {"Blue", "Green", "Grey"};
+        System.out.println("\nSelect Color Theme");
+        for (int i = 0; i < themes.length; i++) {
+            System.out.println((i + 1) + " " + themes[i]);
+        }
+        System.out.print("\nChoose an option ");
+        int themeChoice = readInt(1, themes.length);
+        resume.setColorTheme(themes[themeChoice - 1]);
+
+        System.out.println("Template and theme updated");
+    }
+
+    private void editCustomSections() {
+        while (true) {
+            List<AbstractCustomSection> customSections = resume.getCustomSections();
+
+            System.out.println("\nCUSTOM SECTIONS\n");
+            if (customSections.isEmpty()) {
+                System.out.println("  No custom section entries");
+            } else {
+                for (int i = 0; i < customSections.size(); i++) {
+                    AbstractCustomSection section = customSections.get(i);
+                    System.out.println("  " + (i + 1) + " " + section.getHeader() + " [" + section.getOccupationName() + "]");
+                }
+            }
+
+            System.out.println("\nOptions");
+            System.out.println("  [A] Add Section");
+            System.out.println("  [E] Edit Section");
+            System.out.println("  [V] View Section");
+            System.out.println("  [D] Delete Section");
+            System.out.println("  [B] Back\n");
+
+            System.out.print("Choose option ");
+            String choice = scanner.nextLine().toLowerCase().trim();
+
+            switch (choice) {
+                case "a":
+                    addCustomSection();
+                    break;
+                case "e":
+                    editCustomSectionEntry(customSections);
+                    break;
+                case "v":
+                    viewCustomSectionEntry(customSections);
+                    break;
+                case "d":
+                    deleteCustomSectionEntry(customSections);
+                    break;
+                case "b":
+                    return;
+                default:
+                    System.out.println("Invalid option");
+            }
+        }
+    }
+
+    private void addCustomSection() {
+        try {
+            String occupationName = selectOccupation();
+            System.out.print("Section Header ");
+            String header = readNonEmptyOrThrow();
+
+            AbstractCustomSection section = createCustomSection(header, occupationName);
+            section.setResumeId(resume.getId());
+            section.inputParameters(scanner);
+            resume.getCustomSections().add(section);
+            System.out.println("Custom section added");
+        } catch (InvalidInputException e) {
+            System.out.println("INPUT ERROR " + e.getMessage());
+        } catch (CustomSectionException e) {
+            System.out.println("SECTION ERROR " + e.getMessage());
+        }
+    }
+
+    private void editCustomSectionEntry(List<AbstractCustomSection> list) {
+        if (list.isEmpty()) {
+            System.out.println("No custom sections to edit");
+            return;
+        }
+
+        System.out.print("Enter section number 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        AbstractCustomSection section = list.get(index - 1);
+
+        try {
+            System.out.print("Section Header [" + section.getHeader() + "] ");
+            String header = scanner.nextLine().trim();
+            if (!header.isEmpty()) {
+                section.setHeader(header);
+            }
+
+            section.inputParameters(scanner);
+            System.out.println("Custom section updated");
+        } catch (InvalidInputException e) {
+            System.out.println("INPUT ERROR " + e.getMessage());
+        } catch (CustomSectionException e) {
+            System.out.println("SECTION ERROR " + e.getMessage());
+        }
+    }
+
+    private void viewCustomSectionEntry(List<AbstractCustomSection> list) {
+        if (list.isEmpty()) {
+            System.out.println("No custom sections to view");
+            return;
+        }
+
+        System.out.print("Enter section number 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        list.get(index - 1).displaySection();
+    }
+
+    private void deleteCustomSectionEntry(List<AbstractCustomSection> list) {
+        if (list.isEmpty()) {
+            System.out.println("No custom sections to delete");
+            return;
+        }
+
+        System.out.print("Enter section number to delete 0 to cancel ");
+        int index = readInt(0, list.size());
+        if (index == 0) return;
+
+        list.remove(index - 1);
+        System.out.println("Custom section deleted");
+    }
+
+    private String selectOccupation() throws InvalidInputException {
+        System.out.print("Enter Occupation Name ");
+        return readNonEmptyOrThrow();
+    }
+
+    private AbstractCustomSection createCustomSection(String header, String occupationName) {
+        return new FlexibleCustomSection(header, occupationName);
+    }
+
+    private boolean saveResume() {
+        if (resume.getTitle() == null || resume.getTitle().isEmpty() || resume.getTitle().equals("My Resume")) {
+            System.out.println("\nSAVE RESUME\n");
+            System.out.print("Enter resume title ");
+            String title = readNonEmpty();
+            resume.setTitle(title);
+        }
+
+        try {
+            resumeDAO.saveResume(resume);
+            System.out.println("Resum savd succesfully");
+            return true;
+        } catch (ResumeNotFoundException e) {
+            System.out.println("ERROR Resume not found " + e.getMessage());
+            return false;
+        } catch (DatabaseException e) {
+            System.out.println("ERROR Eror saving resum " + e.getMessage());
+            return false;
+        }
+    }
+
+    private String orEmpty(String value) {
+        return value != null ? value : "";
+    }
+
+    private String readNonEmpty() {
+        while (true) {
+            try {
+                return readNonEmptyOrThrow();
+            } catch (InvalidInputException e) {
+                System.out.print(e.getMessage() + " Please try again ");
+            }
+        }
+    }
+
+    private String readNonEmptyOrThrow() throws InvalidInputException {
+        String input = scanner.nextLine().trim();
+        if (input.isEmpty()) {
+            throw new InvalidInputException("This field cannot be empty.");
+        }
+        return input;
+    }
+
+    private int readInt(int min, int max) {
+        while (true) {
+            try {
+                return readIntOrThrow(min, max);
+            } catch (InvalidInputException e) {
+                System.out.print(e.getMessage() + " ");
+            }
+        }
+    }
+
+    private int readIntOrThrow(int min, int max) throws InvalidInputException {
+        String input = scanner.nextLine().trim();
+        if (input.isEmpty()) {
+            throw new InvalidInputException("Input cannot be empty.");
+        }
+
+        try {
+            int value = Integer.parseInt(input);
+            if (value < min || value > max) {
+                throw new InvalidInputException("Please enter a number between " + min + " and " + max + ".");
+            }
+            return value;
+        } catch (NumberFormatException e) {
+            throw new InvalidInputException("Invalid input Please enter a valid number.");
+        }
+    }
+}
+===== ./src/com/resumebuilder/cli/CLIApp.java =====
+package com.resumebuilder.cli;
+
+import com.resumebuilder.backend.model.User;
+
+public class CLIApp {
+    
+    public static void main(String[] args) {
+        System.out.println("\nRESUME BUILDR CLI APPLICATON\n");
+        
+        try {
+            runApplication();
+        } catch (Exception e) {
+            System.err.println("\nFatal eror occured");
+            e.printStackTrace();
+        }
+        
+        System.out.println("\nThank u for using Resume Buildr");
+    }
+    
+    private static void runApplication() {
+        AuthScreen authScreen = new AuthScreen();
+        
+        while (true) {
+            User currentUser = authScreen.show();
+            
+            if (currentUser == null) {
+                break;
+            }
+            
+            DashboardScreen dashboard = new DashboardScreen(currentUser);
+            boolean logout = dashboard.show();
+            
+            if (logout) {
+                System.out.println("Loged out succesfully");
+            }
+        }
+    }
+}
+===== ./src/com/resumebuilder/cli/DashboardScreen.java =====
+package com.resumebuilder.cli;
+
+import com.resumebuilder.backend.dao.ResumeDAO;
+import com.resumebuilder.backend.exception.DatabaseException;
+import com.resumebuilder.backend.exception.ResumeNotFoundException;
+import com.resumebuilder.backend.model.Resume;
+import com.resumebuilder.backend.model.User;
+import com.resumebuilder.pdf.PdfGenerator;
+
+import java.io.FileOutputStream;
+import java.util.List;
+import java.util.Scanner;
+
+public class DashboardScreen {
+    private final User currentUser;
+    private final ResumeDAO resumeDAO;
+    private final Scanner scanner;
+    
+    public DashboardScreen(User user) {
+        this.currentUser = user;
+        this.resumeDAO = new ResumeDAO();
+        this.scanner = new Scanner(System.in);
+    }
+    
+    public boolean show() {
+        while (true) {
+            System.out.println("\nDASHBORD " + currentUser.getUsername() + " Resums\n");
+            
+            List<Resume> resumes = loadResumes();
+            
+            System.out.println("Your Resums");
+            if (resumes.isEmpty()) {
+                System.out.println("  No resums found Creat one");
+            } else {
+                for (int i = 0; i < resumes.size(); i++) {
+                    Resume r = resumes.get(i);
+                    System.out.println("  " + (i + 1) + " " + r.getTitle() + 
+                                     " " + r.getTemplateName() + " " + r.getColorTheme());
+                }
+            }
+            
+            System.out.println("\nOtions");
+            System.out.println("  [C] Creat New Resum");
+            System.out.println("  [E] Edit Resum");
+            System.out.println("  [D] Delet Resum");
+            System.out.println("  [P] Export to PDF");
+            System.out.println("  [L] Logout\n");
+            
+            System.out.print("Choose an option ");
+            String choice = scanner.nextLine().toLowerCase().trim();
+            
+            switch (choice) {
+                case "c":
+                    createNewResume();
+                    break;
+                case "e":
+                    editResume(resumes);
+                    break;
+                case "d":
+                    deleteResume(resumes);
+                    break;
+                case "p":
+                    exportToPdf(resumes);
+                    break;
+                case "l":
+                    return true;
+                default:
+                    System.out.println("Invlid option Pls try again");
+            }
+        }
+    }
+    
+    private void createNewResume() {
+        Resume newResume = new Resume();
+        newResume.setUserId(currentUser.getId());
+        
+        ResumeEditorScreen editor = new ResumeEditorScreen(newResume, resumeDAO);
+        editor.show();
+    }
+    
+    private void editResume(List<Resume> resumes) {
+        if (resumes.isEmpty()) {
+            System.out.println("No resums to edit");
+            return;
+        }
+        
+        System.out.println("\nEDIT RESUM\n");
+        System.out.println("Your Resumes");
+        for (int i = 0; i < resumes.size(); i++) {
+            Resume r = resumes.get(i);
+            System.out.println("  " + (i + 1) + " " + r.getTitle() + 
+                             " " + r.getTemplateName() + " " + r.getColorTheme());
+        }
+        
+        System.out.print("\nEnter resum numbr to edit 0 to cancl ");
+        int index = readInt(0, resumes.size());
+        
+        if (index == 0) {
+            return;
+        }
+        
+        Resume selected = resumes.get(index - 1);
+        
+        try {
+            Resume fullResume = resumeDAO.getResumeByIdOrThrow(selected.getId());
+            ResumeEditorScreen editor = new ResumeEditorScreen(fullResume, resumeDAO);
+            editor.show();
+        } catch (ResumeNotFoundException e) {
+            System.out.println("ERROR Resume not found");
+        } catch (DatabaseException e) {
+            System.out.println("ERROR Failed to load resume");
+        }
+    }
+    
+    private void deleteResume(List<Resume> resumes) {
+        if (resumes.isEmpty()) {
+            System.out.println("No resums to delet");
+            return;
+        }
+        
+        System.out.println("\nDELET RESUM\n");
+        System.out.println("Your Resumes");
+        for (int i = 0; i < resumes.size(); i++) {
+            Resume r = resumes.get(i);
+            System.out.println("  " + (i + 1) + " " + r.getTitle() + 
+                             " " + r.getTemplateName() + " " + r.getColorTheme());
+        }
+        
+        System.out.print("\nEnter resum numbr to delet 0 to cancl ");
+        int index = readInt(0, resumes.size());
+        
+        if (index == 0) {
+            return;
+        }
+        
+        Resume selected = resumes.get(index - 1);
+        
+        System.out.print("Are u sure u want to delet " + selected.getTitle() + " y/n ");
+        String confirm = scanner.nextLine().toLowerCase().trim();
+        
+        if (confirm.equals("y") || confirm.equals("yes")) {
+            try {
+                boolean success = resumeDAO.deleteResumeOrThrow(selected.getId());
+                if (success) {
+                    System.out.println("Resum deletd succesfully");
+                } else {
+                    System.out.println("ERROR Faild to delet resum");
+                }
+            } catch (ResumeNotFoundException e) {
+                System.out.println("ERROR Resume not found");
+            } catch (DatabaseException e) {
+                System.out.println("ERROR Faild to delet resum");
+            }
+        } else {
+            System.out.println("Deletin canceld");
+        }
+    }
+    
+    private void exportToPdf(List<Resume> resumes) {
+        if (resumes.isEmpty()) {
+            System.out.println("No resums to exprt");
+            return;
+        }
+        
+        System.out.println("\nEXPORT TO PDF\n");
+        System.out.println("Your Resumes");
+        for (int i = 0; i < resumes.size(); i++) {
+            Resume r = resumes.get(i);
+            System.out.println("  " + (i + 1) + " " + r.getTitle() + 
+                             " " + r.getTemplateName() + " " + r.getColorTheme());
+        }
+        
+        System.out.print("\nEnter resum numbr to exprt 0 to cancl ");
+        int index = readInt(0, resumes.size());
+        
+        if (index == 0) {
+            return;
+        }
+        
+        Resume selected = resumes.get(index - 1);
+        try {
+            Resume fullResume = resumeDAO.getResumeByIdOrThrow(selected.getId());
+            String filename = fullResume.getTitle().replaceAll("[^a-zA-Z0-9]", "_") + ".pdf";
+            String filepath = filename;
+            FileOutputStream out = new FileOutputStream(filepath);
+            PdfGenerator.generate(fullResume, out);
+            out.close();
+            System.out.println("PDF generatd succesfully " + filepath);
+        } catch (ResumeNotFoundException e) {
+            System.out.println("ERROR Resume not found");
+        } catch (DatabaseException e) {
+            System.out.println("ERROR Failed to load resume");
+        } catch (Exception e) {
+            System.out.println("ERROR Faild to generat PDF " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private List<Resume> loadResumes() {
+        try {
+            return resumeDAO.getResumesByUserIdOrThrow(currentUser.getId());
+        } catch (DatabaseException e) {
+            System.out.println("ERROR Failed to load resumes");
+            return java.util.Collections.emptyList();
+        }
+    }
+    
+    private int readInt(int min, int max) {
+        while (true) {
+            try {
+                String input = scanner.nextLine().trim();
+                int value = Integer.parseInt(input);
+                if (value >= min && value <= max) {
+                    return value;
+                } else {
+                    System.out.print("Please enter a number between " + min + " and " + max + " ");
+                }
+            } catch (NumberFormatException e) {
+                System.out.print("Invalid input Please enter a valid number ");
+            }
+        }
+    }
+}
+===== ./src/com/resumebuilder/cli/AuthScreen.java =====
+package com.resumebuilder.cli;
+
+import com.resumebuilder.backend.dao.UserDAO;
+import com.resumebuilder.backend.model.User;
+import java.util.Scanner;
+
+public class AuthScreen {
+    private final UserDAO userDAO;
+    private final Scanner scanner;
+    
+    public AuthScreen() {
+        this.userDAO = new UserDAO();
+        this.scanner = new Scanner(System.in);
+    }
+    
+    public User show() {
+        while (true) {
+            System.out.println("\nRESUME BUILDR LOGIN\n");
+            System.out.println("1 Login");
+            System.out.println("2 Regster");
+            System.out.println("3 Exit\n");
+            
+            System.out.print("Choose an option ");
+            int choice = readInt(1, 3);
+            
+            switch (choice) {
+                case 1:
+                    User loggedInUser = handleLogin();
+                    if (loggedInUser != null) {
+                        return loggedInUser;
+                    }
+                    break;
+                case 2:
+                    handleRegister();
+                    break;
+                case 3:
+                    return null;
+            }
+        }
+    }
+    
+    private User handleLogin() {
+        System.out.println("\nLOGIN\n");
+        
+        System.out.print("Username ");
+        String username = scanner.nextLine().trim();
+        
+        if (username.isEmpty()) {
+            System.out.println("Username cannot be empty");
+            return null;
+        }
+        
+        System.out.print("Password ");
+        String password = scanner.nextLine();
+        
+        if (password.isEmpty()) {
+            System.out.println("Password cannot be empty");
+            return null;
+        }
+        
+        User user = userDAO.login(username, password);
+        
+        if (user != null) {
+            System.out.println("Login succesfull Welcom " + username);
+            return user;
+        } else {
+            System.out.println("ERROR Invlid credentials Pls try again");
+            return null;
+        }
+    }
+    
+    private void handleRegister() {
+        System.out.println("\nREGISTER\n");
+        
+        System.out.print("Username ");
+        String username = scanner.nextLine().trim();
+        
+        if (username.isEmpty()) {
+            System.out.println("Username cannot be empty");
+            return;
+        }
+        
+        System.out.print("Password ");
+        String password = scanner.nextLine();
+        
+        if (password.isEmpty()) {
+            System.out.println("Password cannot be empty");
+            return;
+        }
+        
+        System.out.print("Confirm Password ");
+        String confirmPassword = scanner.nextLine();
+        
+        if (!password.equals(confirmPassword)) {
+            System.out.println("ERROR Paswords dont match");
+            return;
+        }
+        
+        User newUser = new User(username, password);
+        boolean success = userDAO.register(newUser);
+        
+        if (success) {
+            System.out.println("Registraton succesfull You can now login");
+        } else {
+            System.out.println("ERROR Registraton faild Usrname may alredy exist");
+        }
+    }
+    
+    private int readInt(int min, int max) {
+        while (true) {
+            try {
+                String input = scanner.nextLine().trim();
+                int value = Integer.parseInt(input);
+                if (value >= min && value <= max) {
+                    return value;
+                } else {
+                    System.out.print("Please enter a number between " + min + " and " + max + " ");
+                }
+            } catch (NumberFormatException e) {
+                System.out.print("Invalid input Please enter a valid number ");
+            }
+        }
+    }
+}
+===== ./src/com/resumebuilder/gui/ResumeBuilderApp.java =====
+package com.resumebuilder.gui;
+
+import com.resumebuilder.backend.customsection.AbstractCustomSection;
+import com.resumebuilder.backend.customsection.FlexibleCustomSection;
+import com.resumebuilder.backend.customsection.PresetCustomSection;
+import com.resumebuilder.backend.dao.ResumeDAO;
+import com.resumebuilder.backend.dao.UserDAO;
+import com.resumebuilder.backend.exception.CustomSectionException;
+import com.resumebuilder.backend.exception.DatabaseException;
+import com.resumebuilder.backend.exception.InvalidInputException;
+import com.resumebuilder.backend.exception.ResumeNotFoundException;
+import com.resumebuilder.backend.model.CustomParameter;
+import com.resumebuilder.backend.model.Education;
+import com.resumebuilder.backend.model.Experience;
+import com.resumebuilder.backend.model.Project;
+import com.resumebuilder.backend.model.Resume;
+import com.resumebuilder.backend.model.Skill;
+import com.resumebuilder.backend.model.User;
+import com.resumebuilder.pdf.PdfGenerator;
+import javafx.application.Application;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.event.ActionEvent;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.Scene;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
+import javafx.stage.FileChooser;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+import javafx.stage.Window;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+
+public class ResumeBuilderApp extends Application {
+    private final UserDAO userDAO = new UserDAO();
+    private final ResumeDAO resumeDAO = new ResumeDAO();
+
+    private Stage primaryStage;
+    private User currentUser;
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+
+    @Override
+    public void start(Stage stage) {
+        this.primaryStage = stage;
+        this.primaryStage.setTitle("Resume Builder");
+        this.primaryStage.setMinWidth(540);
+        this.primaryStage.setMinHeight(420);
+        showAuthScene();
+        this.primaryStage.show();
+    }
+
+    private void showAuthScene() {
+        TabPane authTabs = new TabPane();
+        authTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+
+        Tab loginTab = new Tab("Login");
+        Tab registerTab = new Tab("Register");
+
+        TextField loginUsernameField = new TextField();
+        PasswordField loginPasswordField = new PasswordField();
+        loginTab.setContent(buildLoginPane(authTabs, registerTab, loginUsernameField, loginPasswordField));
+        registerTab.setContent(buildRegisterPane(authTabs, loginTab, loginUsernameField));
+
+        authTabs.getTabs().setAll(loginTab, registerTab);
+
+        Label titleLabel = new Label("Resume Builder");
+        titleLabel.setStyle("-fx-font-size: 22px; -fx-font-weight: bold;");
+
+        VBox header = new VBox(4, titleLabel);
+        BorderPane root = new BorderPane(authTabs);
+        root.setPadding(new Insets(20));
+        root.setTop(header);
+        BorderPane.setMargin(header, new Insets(0, 0, 16, 0));
+
+        primaryStage.setScene(new Scene(root, 560, 430));
+    }
+
+    private Node buildLoginPane(TabPane authTabs, Tab registerTab, TextField loginUsernameField, PasswordField loginPasswordField) {
+        GridPane form = createFormGrid();
+
+        Button loginButton = new Button("Login");
+        loginButton.setDefaultButton(true);
+        loginButton.disableProperty().bind(
+                Bindings.createBooleanBinding(
+                        () -> loginUsernameField.getText().trim().isEmpty() || loginPasswordField.getText().isEmpty(),
+                        loginUsernameField.textProperty(),
+                        loginPasswordField.textProperty()
+                )
+        );
+
+        Button switchToRegisterButton = new Button("Create Account");
+        switchToRegisterButton.setOnAction(event -> authTabs.getSelectionModel().select(registerTab));
+
+        loginButton.setOnAction(event -> {
+            String username = loginUsernameField.getText().trim();
+            String password = loginPasswordField.getText();
+
+            User user = userDAO.login(username, password);
+            if (user == null) {
+                showError(primaryStage, "Login Failed", "Invalid credentials or database connection issue.");
+                return;
+            }
+
+            currentUser = user;
+            loginPasswordField.clear();
+            showDashboardScene();
+        });
+
+        form.add(new Label("Username"), 0, 0);
+        form.add(loginUsernameField, 1, 0);
+        form.add(new Label("Password"), 0, 1);
+        form.add(loginPasswordField, 1, 1);
+
+        HBox actions = new HBox(10, loginButton, switchToRegisterButton);
+        actions.setAlignment(Pos.CENTER_LEFT);
+
+        VBox content = new VBox(16, form, actions);
+        content.setPadding(new Insets(8, 0, 0, 0));
+        return content;
+    }
+
+    private Node buildRegisterPane(TabPane authTabs, Tab loginTab, TextField loginUsernameField) {
+        GridPane form = createFormGrid();
+
+        TextField usernameField = new TextField();
+        PasswordField passwordField = new PasswordField();
+        PasswordField confirmPasswordField = new PasswordField();
+
+        Button registerButton = new Button("Register");
+        registerButton.disableProperty().bind(
+                Bindings.createBooleanBinding(
+                        () -> usernameField.getText().trim().isEmpty()
+                                || passwordField.getText().isEmpty()
+                                || confirmPasswordField.getText().isEmpty(),
+                        usernameField.textProperty(),
+                        passwordField.textProperty(),
+                        confirmPasswordField.textProperty()
+                )
+        );
+
+        registerButton.setOnAction(event -> {
+            String username = usernameField.getText().trim();
+            String password = passwordField.getText();
+            String confirmPassword = confirmPasswordField.getText();
+
+            if (!password.equals(confirmPassword)) {
+                showError(primaryStage, "Register Failed", "Passwords do not match.");
+                return;
+            }
+
+            boolean success = userDAO.register(new User(username, password));
+            if (!success) {
+                showError(primaryStage, "Register Failed", "Registration failed. Username may already exist.");
+                return;
+            }
+
+            showInfo(primaryStage, "Registration Complete", "Account created successfully. You can log in now.");
+            loginUsernameField.setText(username);
+            usernameField.clear();
+            passwordField.clear();
+            confirmPasswordField.clear();
+            authTabs.getSelectionModel().select(loginTab);
+        });
+
+        form.add(new Label("Username"), 0, 0);
+        form.add(usernameField, 1, 0);
+        form.add(new Label("Password"), 0, 1);
+        form.add(passwordField, 1, 1);
+        form.add(new Label("Confirm Password"), 0, 2);
+        form.add(confirmPasswordField, 1, 2);
+
+        VBox content = new VBox(16, form, registerButton);
+        content.setPadding(new Insets(8, 0, 0, 0));
+        return content;
+    }
+
+    private void showDashboardScene() {
+        ObservableList<Resume> resumeItems = FXCollections.observableArrayList();
+        TableView<Resume> resumeTable = createResumeTable(resumeItems);
+
+        Runnable refreshDashboard = () -> {
+            try {
+                resumeItems.setAll(resumeDAO.getResumesByUserIdOrThrow(currentUser.getId()));
+            } catch (DatabaseException e) {
+                resumeItems.clear();
+                showError(primaryStage, "Load Failed", "Could not load resumes from the database.");
+            }
+        };
+
+        Button createButton = new Button("Create");
+        Button editButton = new Button("Edit");
+        Button deleteButton = new Button("Delete");
+        Button exportButton = new Button("Export PDF");
+        Button refreshButton = new Button("Refresh");
+        Button logoutButton = new Button("Logout");
+
+        createButton.setOnAction(event -> {
+            Resume newResume = new Resume();
+            newResume.setUserId(currentUser.getId());
+            openResumeEditor(newResume, refreshDashboard);
+        });
+
+        editButton.disableProperty().bind(resumeTable.getSelectionModel().selectedItemProperty().isNull());
+        editButton.setOnAction(event -> {
+            Resume selectedResume = resumeTable.getSelectionModel().getSelectedItem();
+            if (selectedResume == null) {
+                return;
+            }
+
+            try {
+                Resume fullResume = resumeDAO.getResumeByIdOrThrow(selectedResume.getId());
+                openResumeEditor(fullResume, refreshDashboard);
+            } catch (ResumeNotFoundException e) {
+                showError(primaryStage, "Resume Missing", "The selected resume no longer exists.");
+                refreshDashboard.run();
+            } catch (DatabaseException e) {
+                showError(primaryStage, "Load Failed", "Could not open the selected resume.");
+            }
+        });
+
+        deleteButton.disableProperty().bind(resumeTable.getSelectionModel().selectedItemProperty().isNull());
+        deleteButton.setOnAction(event -> {
+            Resume selectedResume = resumeTable.getSelectionModel().getSelectedItem();
+            if (selectedResume == null) {
+                return;
+            }
+
+            boolean confirmed = confirm(
+                    primaryStage,
+                    "Delete Resume",
+                    "Delete \"" + selectedResume.getTitle() + "\"?"
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                resumeDAO.deleteResumeOrThrow(selectedResume.getId());
+                refreshDashboard.run();
+            } catch (ResumeNotFoundException e) {
+                showError(primaryStage, "Resume Missing", "The selected resume no longer exists.");
+                refreshDashboard.run();
+            } catch (DatabaseException e) {
+                showError(primaryStage, "Delete Failed", "Could not delete the selected resume.");
+            }
+        });
+
+        exportButton.disableProperty().bind(resumeTable.getSelectionModel().selectedItemProperty().isNull());
+        exportButton.setOnAction(event -> exportSelectedResume(resumeTable.getSelectionModel().getSelectedItem()));
+
+        refreshButton.setOnAction(event -> refreshDashboard.run());
+        logoutButton.setOnAction(event -> {
+            currentUser = null;
+            showAuthScene();
+        });
+
+        Label titleLabel = new Label("Welcome, " + currentUser.getUsername());
+        titleLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+        Label subtitleLabel = new Label("Create, edit, delete, and export resumes.");
+
+        HBox buttonBar = new HBox(10, createButton, editButton, deleteButton, exportButton, refreshButton, logoutButton);
+        buttonBar.setAlignment(Pos.CENTER_LEFT);
+
+        VBox center = new VBox(12, resumeTable, buttonBar);
+        VBox.setVgrow(resumeTable, Priority.ALWAYS);
+
+        BorderPane root = new BorderPane(center);
+        root.setPadding(new Insets(20));
+        root.setTop(new VBox(4, titleLabel, subtitleLabel));
+        BorderPane.setMargin(center, new Insets(16, 0, 0, 0));
+
+        refreshDashboard.run();
+        primaryStage.setScene(new Scene(root, 920, 620));
+    }
+
+    private TableView<Resume> createResumeTable(ObservableList<Resume> resumeItems) {
+        TableView<Resume> table = new TableView<>(resumeItems);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        table.setPlaceholder(new Label("No resumes found."));
+
+        TableColumn<Resume, String> titleColumn = new TableColumn<>("Title");
+        titleColumn.setCellValueFactory(cellData -> new ReadOnlyStringWrapper(safe(cellData.getValue().getTitle())));
+
+        TableColumn<Resume, String> templateColumn = new TableColumn<>("Template");
+        templateColumn.setCellValueFactory(cellData -> new ReadOnlyStringWrapper(safe(cellData.getValue().getTemplateName())));
+
+        TableColumn<Resume, String> themeColumn = new TableColumn<>("Theme");
+        themeColumn.setCellValueFactory(cellData -> new ReadOnlyStringWrapper(safe(cellData.getValue().getColorTheme())));
+
+        table.getColumns().add(titleColumn);
+        table.getColumns().add(templateColumn);
+        table.getColumns().add(themeColumn);
+        return table;
+    }
+
+    private void openResumeEditor(Resume resume, Runnable onSaved) {
+        Stage editorStage = new Stage();
+        editorStage.initOwner(primaryStage);
+        editorStage.initModality(Modality.APPLICATION_MODAL);
+        editorStage.setTitle(resume.getId() == 0 ? "Create Resume" : "Edit Resume");
+        editorStage.setMinWidth(960);
+        editorStage.setMinHeight(720);
+
+        ResumeEditorPane editorPane = new ResumeEditorPane(resume, resumeDAO, editorStage, onSaved);
+        editorStage.setScene(new Scene(editorPane, 980, 740));
+        editorStage.showAndWait();
+    }
+
+    private void exportSelectedResume(Resume selectedResume) {
+        if (selectedResume == null) {
+            return;
+        }
+
+        try {
+            Resume fullResume = resumeDAO.getResumeByIdOrThrow(selectedResume.getId());
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Export Resume as PDF");
+            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
+            fileChooser.setInitialFileName(sanitizeFileName(fullResume.getTitle()) + ".pdf");
+
+            File file = fileChooser.showSaveDialog(primaryStage);
+            if (file == null) {
+                return;
+            }
+
+            try (FileOutputStream outputStream = new FileOutputStream(file)) {
+                PdfGenerator.generate(fullResume, outputStream);
+            }
+
+            showInfo(primaryStage, "Export Complete", "PDF saved to:\n" + file.getAbsolutePath());
+        } catch (ResumeNotFoundException e) {
+            showError(primaryStage, "Resume Missing", "The selected resume no longer exists.");
+        } catch (DatabaseException e) {
+            showError(primaryStage, "Load Failed", "Could not load the selected resume for export.");
+        } catch (Exception e) {
+            showError(primaryStage, "Export Failed", "Could not generate the PDF file.");
+        }
+    }
+
+    private GridPane createFormGrid() {
+        GridPane grid = new GridPane();
+        grid.setHgap(12);
+        grid.setVgap(12);
+        return grid;
+    }
+
+    private static void showInfo(Window owner, String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.initOwner(owner);
+        alert.setTitle(title);
+        alert.setHeaderText(title);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
+    private static void showError(Window owner, String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.initOwner(owner);
+        alert.setTitle(title);
+        alert.setHeaderText(title);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
+    private static boolean confirm(Window owner, String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.initOwner(owner);
+        alert.setTitle(title);
+        alert.setHeaderText(title);
+        alert.setContentText(message);
+        alert.showAndWait();
+        return ButtonType.OK.equals(alert.getResult());
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
+    }
+
+    private static String blankToNull(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private static String sanitizeFileName(String value) {
+        String fallback = value == null || value.trim().isEmpty() ? "resume" : value.trim();
+        return fallback.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    private static final class ResumeEditorPane extends BorderPane {
+        private final Resume resume;
+        private final ResumeDAO resumeDAO;
+        private final Stage stage;
+        private final Runnable onSaved;
+
+        private final TextField titleField = new TextField();
+        private final TextField fullNameField = new TextField();
+        private final TextField emailField = new TextField();
+        private final TextField phoneField = new TextField();
+        private final TextField addressField = new TextField();
+        private final ComboBox<String> templateBox = new ComboBox<>();
+        private final ComboBox<String> themeBox = new ComboBox<>();
+        private final TextArea summaryArea = new TextArea();
+
+        private final ObservableList<Education> educationItems;
+        private final ObservableList<Experience> experienceItems;
+        private final ObservableList<Project> projectItems;
+        private final ObservableList<Skill> skillItems;
+        private final ObservableList<AbstractCustomSection> customSectionItems;
+
+        private ResumeEditorPane(Resume resume, ResumeDAO resumeDAO, Stage stage, Runnable onSaved) {
+            this.resume = resume;
+            this.resumeDAO = resumeDAO;
+            this.stage = stage;
+            this.onSaved = onSaved;
+
+            this.educationItems = FXCollections.observableArrayList(copyEducationList(resume.getEducationList()));
+            this.experienceItems = FXCollections.observableArrayList(copyExperienceList(resume.getExperienceList()));
+            this.projectItems = FXCollections.observableArrayList(copyProjectList(resume.getProjectList()));
+            this.skillItems = FXCollections.observableArrayList(copySkillList(resume.getSkillList()));
+            this.customSectionItems = FXCollections.observableArrayList(copyCustomSectionList(resume.getCustomSections()));
+
+            setPadding(new Insets(16));
+            setTop(buildHeader());
+            setCenter(buildTabs());
+            setBottom(buildActions());
+        }
+
+        private Node buildHeader() {
+            Label titleLabel = new Label(resume.getId() == 0 ? "Create Resume" : "Edit Resume");
+            titleLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+            Label subtitleLabel = new Label("This screen keeps the existing resume logic and saves through the same DAO.");
+
+            VBox header = new VBox(4, titleLabel, subtitleLabel);
+            BorderPane.setMargin(header, new Insets(0, 0, 16, 0));
+            return header;
+        }
+
+        private Node buildTabs() {
+            titleField.setText(safe(resume.getTitle()));
+            fullNameField.setText(safe(resume.getFullName()));
+            emailField.setText(safe(resume.getEmail()));
+            phoneField.setText(safe(resume.getPhone()));
+            addressField.setText(safe(resume.getAddress()));
+
+            templateBox.setItems(FXCollections.observableArrayList("Classic", "Modern", "Creative", "Minimal"));
+            templateBox.setValue(safe(resume.getTemplateName()).isEmpty() ? "Classic" : resume.getTemplateName());
+
+            themeBox.setItems(FXCollections.observableArrayList("Blue", "Green", "Grey"));
+            themeBox.setValue(safe(resume.getColorTheme()).isEmpty() ? "Blue" : resume.getColorTheme());
+
+            summaryArea.setText(safe(resume.getSummary()));
+            summaryArea.setPromptText("Professional summary");
+            summaryArea.setPrefRowCount(8);
+            summaryArea.setWrapText(true);
+
+            TabPane tabPane = new TabPane();
+            tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+            tabPane.getTabs().add(createTab("General", buildGeneralTab()));
+            tabPane.getTabs().add(createTab("Education", buildEducationTab()));
+            tabPane.getTabs().add(createTab("Experience", buildExperienceTab()));
+            tabPane.getTabs().add(createTab("Projects", buildProjectsTab()));
+            tabPane.getTabs().add(createTab("Skills", buildSkillsTab()));
+            tabPane.getTabs().add(createTab("Custom Sections", buildCustomSectionsTab()));
+            VBox.setVgrow(tabPane, Priority.ALWAYS);
+            return tabPane;
+        }
+
+        private Tab createTab(String title, Node content) {
+            Tab tab = new Tab(title);
+            tab.setContent(content);
+            return tab;
+        }
+
+        private Node buildGeneralTab() {
+            GridPane grid = new GridPane();
+            grid.setHgap(12);
+            grid.setVgap(12);
+
+            grid.add(new Label("Title"), 0, 0);
+            grid.add(titleField, 1, 0);
+            grid.add(new Label("Full Name"), 0, 1);
+            grid.add(fullNameField, 1, 1);
+            grid.add(new Label("Email"), 0, 2);
+            grid.add(emailField, 1, 2);
+            grid.add(new Label("Phone"), 0, 3);
+            grid.add(phoneField, 1, 3);
+            grid.add(new Label("Address"), 0, 4);
+            grid.add(addressField, 1, 4);
+            grid.add(new Label("Template"), 0, 5);
+            grid.add(templateBox, 1, 5);
+            grid.add(new Label("Color Theme"), 0, 6);
+            grid.add(themeBox, 1, 6);
+            grid.add(new Label("Summary"), 0, 7);
+            grid.add(summaryArea, 1, 7);
+
+            summaryArea.setPrefHeight(180);
+            GridPane.setHgrow(titleField, Priority.ALWAYS);
+            GridPane.setHgrow(fullNameField, Priority.ALWAYS);
+            GridPane.setHgrow(emailField, Priority.ALWAYS);
+            GridPane.setHgrow(phoneField, Priority.ALWAYS);
+            GridPane.setHgrow(addressField, Priority.ALWAYS);
+            GridPane.setHgrow(templateBox, Priority.ALWAYS);
+            GridPane.setHgrow(themeBox, Priority.ALWAYS);
+            GridPane.setHgrow(summaryArea, Priority.ALWAYS);
+            GridPane.setVgrow(summaryArea, Priority.ALWAYS);
+
+            VBox content = new VBox(grid);
+            content.setPadding(new Insets(12));
+            VBox.setVgrow(grid, Priority.ALWAYS);
+            return content;
+        }
+
+        private Node buildEducationTab() {
+            TableView<Education> table = new TableView<>(educationItems);
+            table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+            table.setPlaceholder(new Label("No education entries."));
+            table.getColumns().add(createTextColumn("Degree", Education::getDegree));
+            table.getColumns().add(createTextColumn("University", Education::getUniversity));
+            table.getColumns().add(createTextColumn("Year", Education::getYear));
+            table.getColumns().add(createTextColumn("CGPA", Education::getCgpa));
+
+            Button addButton = new Button("Add");
+            Button editButton = new Button("Edit");
+            Button deleteButton = new Button("Delete");
+
+            addButton.setOnAction(event -> {
+                Education education = showEducationDialog(null);
+                if (education != null) {
+                    educationItems.add(education);
+                }
+            });
+            editButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            editButton.setOnAction(event -> {
+                Education selected = table.getSelectionModel().getSelectedItem();
+                if (selected == null) {
+                    return;
+                }
+
+                Education updated = showEducationDialog(selected);
+                if (updated != null) {
+                    int index = table.getSelectionModel().getSelectedIndex();
+                    educationItems.set(index, updated);
+                }
+            });
+
+            deleteButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            deleteButton.setOnAction(event -> {
+                Education selected = table.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    educationItems.remove(selected);
+                }
+            });
+
+            return buildTableSection(table, addButton, editButton, deleteButton);
+        }
+
+        private Node buildExperienceTab() {
+            TableView<Experience> table = new TableView<>(experienceItems);
+            table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+            table.setPlaceholder(new Label("No experience entries."));
+            table.getColumns().add(createTextColumn("Role", Experience::getRole));
+            table.getColumns().add(createTextColumn("Company", Experience::getCompany));
+            table.getColumns().add(createTextColumn("Duration", Experience::getDuration));
+            table.getColumns().add(createTextColumn("Description", Experience::getDescription));
+
+            Button addButton = new Button("Add");
+            Button editButton = new Button("Edit");
+            Button deleteButton = new Button("Delete");
+
+            addButton.setOnAction(event -> {
+                Experience experience = showExperienceDialog(null);
+                if (experience != null) {
+                    experienceItems.add(experience);
+                }
+            });
+            editButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            editButton.setOnAction(event -> {
+                Experience selected = table.getSelectionModel().getSelectedItem();
+                if (selected == null) {
+                    return;
+                }
+
+                Experience updated = showExperienceDialog(selected);
+                if (updated != null) {
+                    int index = table.getSelectionModel().getSelectedIndex();
+                    experienceItems.set(index, updated);
+                }
+            });
+
+            deleteButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            deleteButton.setOnAction(event -> {
+                Experience selected = table.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    experienceItems.remove(selected);
+                }
+            });
+
+            return buildTableSection(table, addButton, editButton, deleteButton);
+        }
+
+        private Node buildProjectsTab() {
+            TableView<Project> table = new TableView<>(projectItems);
+            table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+            table.setPlaceholder(new Label("No project entries."));
+            table.getColumns().add(createTextColumn("Title", Project::getTitle));
+            table.getColumns().add(createTextColumn("Description", Project::getDescription));
+
+            Button addButton = new Button("Add");
+            Button editButton = new Button("Edit");
+            Button deleteButton = new Button("Delete");
+
+            addButton.setOnAction(event -> {
+                Project project = showProjectDialog(null);
+                if (project != null) {
+                    projectItems.add(project);
+                }
+            });
+            editButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            editButton.setOnAction(event -> {
+                Project selected = table.getSelectionModel().getSelectedItem();
+                if (selected == null) {
+                    return;
+                }
+
+                Project updated = showProjectDialog(selected);
+                if (updated != null) {
+                    int index = table.getSelectionModel().getSelectedIndex();
+                    projectItems.set(index, updated);
+                }
+            });
+
+            deleteButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            deleteButton.setOnAction(event -> {
+                Project selected = table.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    projectItems.remove(selected);
+                }
+            });
+
+            return buildTableSection(table, addButton, editButton, deleteButton);
+        }
+
+        private Node buildSkillsTab() {
+            TableView<Skill> table = new TableView<>(skillItems);
+            table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+            table.setPlaceholder(new Label("No skills yet."));
+            table.getColumns().add(createTextColumn("Skill", Skill::getSkillName));
+
+            Button addButton = new Button("Add");
+            Button editButton = new Button("Edit");
+            Button deleteButton = new Button("Delete");
+
+            addButton.setOnAction(event -> {
+                Skill skill = showSkillDialog(null);
+                if (skill != null) {
+                    skillItems.add(skill);
+                }
+            });
+            editButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            editButton.setOnAction(event -> {
+                Skill selected = table.getSelectionModel().getSelectedItem();
+                if (selected == null) {
+                    return;
+                }
+
+                Skill updated = showSkillDialog(selected);
+                if (updated != null) {
+                    int index = table.getSelectionModel().getSelectedIndex();
+                    skillItems.set(index, updated);
+                }
+            });
+
+            deleteButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            deleteButton.setOnAction(event -> {
+                Skill selected = table.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    skillItems.remove(selected);
+                }
+            });
+
+            return buildTableSection(table, addButton, editButton, deleteButton);
+        }
+
+        private Node buildCustomSectionsTab() {
+            TableView<AbstractCustomSection> table = new TableView<>(customSectionItems);
+            table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+            table.setPlaceholder(new Label("No custom sections yet."));
+            table.getColumns().add(createTextColumn("Header", AbstractCustomSection::getHeader));
+            table.getColumns().add(createTextColumn("Occupation", AbstractCustomSection::getOccupationName));
+            table.getColumns().add(createTextColumn("Parameters", section -> String.valueOf(section.getParameters().size())));
+
+            Button addButton = new Button("Add");
+            Button editButton = new Button("Edit");
+            Button viewButton = new Button("View");
+            Button deleteButton = new Button("Delete");
+
+            addButton.setOnAction(event -> {
+                AbstractCustomSection section = showCustomSectionDialog(null);
+                if (section != null) {
+                    customSectionItems.add(section);
+                }
+            });
+            editButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            editButton.setOnAction(event -> {
+                AbstractCustomSection selected = table.getSelectionModel().getSelectedItem();
+                if (selected == null) {
+                    return;
+                }
+
+                AbstractCustomSection updated = showCustomSectionDialog(selected);
+                if (updated != null) {
+                    int index = table.getSelectionModel().getSelectedIndex();
+                    customSectionItems.set(index, updated);
+                }
+            });
+
+            viewButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            viewButton.setOnAction(event -> {
+                AbstractCustomSection selected = table.getSelectionModel().getSelectedItem();
+                if (selected == null) {
+                    return;
+                }
+                showInfo(stage, "Custom Section", formatCustomSection(selected));
+            });
+
+            deleteButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            deleteButton.setOnAction(event -> {
+                AbstractCustomSection selected = table.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    customSectionItems.remove(selected);
+                }
+            });
+
+            return buildTableSection(table, addButton, editButton, viewButton, deleteButton);
+        }
+
+        private Node buildTableSection(TableView<?> table, Button... buttons) {
+            HBox buttonBar = new HBox(10, buttons);
+            VBox content = new VBox(12, table, buttonBar);
+            content.setPadding(new Insets(12));
+            VBox.setVgrow(table, Priority.ALWAYS);
+            return content;
+        }
+
+        private Node buildActions() {
+            Button saveButton = new Button("Save");
+            saveButton.setDefaultButton(true);
+            Button cancelButton = new Button("Cancel");
+
+            saveButton.setOnAction(event -> saveResume());
+            cancelButton.setOnAction(event -> {
+                if (confirm(stage, "Discard Changes", "Close this editor without saving?")) {
+                    stage.close();
+                }
+            });
+
+            HBox actionBar = new HBox(10, saveButton, cancelButton);
+            actionBar.setAlignment(Pos.CENTER_RIGHT);
+            actionBar.setPadding(new Insets(16, 0, 0, 0));
+            return actionBar;
+        }
+
+        private void saveResume() {
+            try {
+                resume.setTitle(requireNonEmptyOrThrow(titleField.getText(), "Resume title is required."));
+                resume.setFullName(blankToNull(fullNameField.getText()));
+                resume.setEmail(blankToNull(emailField.getText()));
+                resume.setPhone(blankToNull(phoneField.getText()));
+                resume.setAddress(blankToNull(addressField.getText()));
+                resume.setSummary(blankToNull(summaryArea.getText()));
+                resume.setTemplateName(templateBox.getValue());
+                resume.setColorTheme(themeBox.getValue());
+                resume.setEducationList(new ArrayList<>(educationItems));
+                resume.setExperienceList(new ArrayList<>(experienceItems));
+                resume.setProjectList(new ArrayList<>(projectItems));
+                resume.setSkillList(new ArrayList<>(skillItems));
+                resume.setCustomSections(new ArrayList<>(customSectionItems));
+
+                resumeDAO.saveResume(resume);
+                if (onSaved != null) {
+                    onSaved.run();
+                }
+                stage.close();
+            } catch (InvalidInputException e) {
+                showError(stage, "INPUT ERROR", e.getMessage());
+            } catch (ResumeNotFoundException e) {
+                showError(stage, "Save Failed", "The resume could not be found for update.");
+            } catch (DatabaseException e) {
+                showError(stage, "Save Failed", "Could not save the resume to the database.");
+            }
+        }
+
+        private Education showEducationDialog(Education existing) {
+            Dialog<Education> dialog = new Dialog<>();
+            dialog.initOwner(stage);
+            dialog.setTitle(existing == null ? "Add Education" : "Edit Education");
+
+            ButtonType saveType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().addAll(saveType, ButtonType.CANCEL);
+
+            TextField degreeField = new TextField(existing == null ? "" : safe(existing.getDegree()));
+            TextField universityField = new TextField(existing == null ? "" : safe(existing.getUniversity()));
+            TextField yearField = new TextField(existing == null ? "" : safe(existing.getYear()));
+            TextField cgpaField = new TextField(existing == null ? "" : safe(existing.getCgpa()));
+
+            GridPane grid = createDialogGrid();
+            grid.add(new Label("Degree"), 0, 0);
+            grid.add(degreeField, 1, 0);
+            grid.add(new Label("University"), 0, 1);
+            grid.add(universityField, 1, 1);
+            grid.add(new Label("Year"), 0, 2);
+            grid.add(yearField, 1, 2);
+            grid.add(new Label("CGPA"), 0, 3);
+            grid.add(cgpaField, 1, 3);
+
+            Node saveButton = dialog.getDialogPane().lookupButton(saveType);
+            saveButton.disableProperty().bind(
+                    Bindings.createBooleanBinding(
+                            () -> degreeField.getText().trim().isEmpty() || universityField.getText().trim().isEmpty(),
+                            degreeField.textProperty(),
+                            universityField.textProperty()
+                    )
+            );
+
+            dialog.getDialogPane().setContent(grid);
+            dialog.setResultConverter(button -> {
+                if (button != saveType) {
+                    return null;
+                }
+
+                Education updated = copyEducation(existing);
+                updated.setDegree(degreeField.getText().trim());
+                updated.setUniversity(universityField.getText().trim());
+                updated.setYear(blankToNull(yearField.getText()));
+                updated.setCgpa(blankToNull(cgpaField.getText()));
+                return updated;
+            });
+
+            dialog.showAndWait();
+            return dialog.getResult();
+        }
+
+        private Experience showExperienceDialog(Experience existing) {
+            Dialog<Experience> dialog = new Dialog<>();
+            dialog.initOwner(stage);
+            dialog.setTitle(existing == null ? "Add Experience" : "Edit Experience");
+
+
+            ButtonType saveType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().addAll(saveType, ButtonType.CANCEL);
+
+            TextField roleField = new TextField(existing == null ? "" : safe(existing.getRole()));
+            TextField companyField = new TextField(existing == null ? "" : safe(existing.getCompany()));
+            TextField durationField = new TextField(existing == null ? "" : safe(existing.getDuration()));
+            TextArea descriptionArea = new TextArea(existing == null ? "" : safe(existing.getDescription()));
+            descriptionArea.setPrefRowCount(4);
+            descriptionArea.setWrapText(true);
+
+            GridPane grid = createDialogGrid();
+            grid.add(new Label("Role"), 0, 0);
+            grid.add(roleField, 1, 0);
+            grid.add(new Label("Company"), 0, 1);
+            grid.add(companyField, 1, 1);
+            grid.add(new Label("Duration"), 0, 2);
+            grid.add(durationField, 1, 2);
+            grid.add(new Label("Description"), 0, 3);
+            grid.add(descriptionArea, 1, 3);
+
+            Node saveButton = dialog.getDialogPane().lookupButton(saveType);
+            saveButton.disableProperty().bind(
+                    Bindings.createBooleanBinding(
+                            () -> roleField.getText().trim().isEmpty() || companyField.getText().trim().isEmpty(),
+                            roleField.textProperty(),
+                            companyField.textProperty()
+                    )
+            );
+dialog.getDialogPane().setPrefWidth(700);
+            dialog.getDialogPane().setContent(grid);
+            dialog.setResultConverter(button -> {
+                if (button != saveType) {
+                    return null;
+                }
+
+                Experience updated = copyExperience(existing);
+                updated.setRole(roleField.getText().trim());
+                updated.setCompany(companyField.getText().trim());
+                updated.setDuration(blankToNull(durationField.getText()));
+                updated.setDescription(blankToNull(descriptionArea.getText()));
+                return updated;
+            });
+
+            dialog.showAndWait();
+            return dialog.getResult();
+        }
+
+        private Project showProjectDialog(Project existing) {
+            Dialog<Project> dialog = new Dialog<>();
+            dialog.initOwner(stage);
+            dialog.setTitle(existing == null ? "Add Project" : "Edit Project");
+
+            ButtonType saveType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().addAll(saveType, ButtonType.CANCEL);
+
+            TextField titleField = new TextField(existing == null ? "" : safe(existing.getTitle()));
+            TextArea descriptionArea = new TextArea(existing == null ? "" : safe(existing.getDescription()));
+            descriptionArea.setPrefRowCount(4);
+            descriptionArea.setWrapText(true);
+
+            GridPane grid = createDialogGrid();
+            grid.add(new Label("Title"), 0, 0);
+            grid.add(titleField, 1, 0);
+            grid.add(new Label("Description"), 0, 1);
+            grid.add(descriptionArea, 1, 1);
+
+            Node saveButton = dialog.getDialogPane().lookupButton(saveType);
+            saveButton.disableProperty().bind(
+                    Bindings.createBooleanBinding(
+                            () -> titleField.getText().trim().isEmpty(),
+                            titleField.textProperty()
+                    )
+            );
+
+            dialog.getDialogPane().setContent(grid);
+                        grid.setPrefWidth(700);
+
+            dialog.setResultConverter(button -> {
+                if (button != saveType) {
+                    return null;
+                }
+
+                Project updated = copyProject(existing);
+                updated.setTitle(titleField.getText().trim());
+                updated.setDescription(blankToNull(descriptionArea.getText()));
+                return updated;
+            });
+
+            dialog.showAndWait();
+            return dialog.getResult();
+        }
+
+        private Skill showSkillDialog(Skill existing) {
+            Dialog<Skill> dialog = new Dialog<>();
+            dialog.initOwner(stage);
+            dialog.setTitle(existing == null ? "Add Skill" : "Edit Skill");
+
+            ButtonType saveType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().addAll(saveType, ButtonType.CANCEL);
+
+            TextField skillNameField = new TextField(existing == null ? "" : safe(existing.getSkillName()));
+
+            GridPane grid = createDialogGrid();
+            grid.add(new Label("Skill Name"), 0, 0);
+            grid.add(skillNameField, 1, 0);
+
+            Node saveButton = dialog.getDialogPane().lookupButton(saveType);
+            saveButton.disableProperty().bind(
+                    Bindings.createBooleanBinding(
+                            () -> skillNameField.getText().trim().isEmpty(),
+                            skillNameField.textProperty()
+                    )
+            );
+
+            dialog.getDialogPane().setContent(grid);
+            dialog.setResultConverter(button -> {
+                if (button != saveType) {
+                    return null;
+                }
+
+                Skill updated = copySkill(existing);
+                updated.setSkillName(skillNameField.getText().trim());
+                return updated;
+            });
+
+            dialog.showAndWait();
+            return dialog.getResult();
+        }
+
+        private AbstractCustomSection showCustomSectionDialog(AbstractCustomSection existing) {
+            Dialog<AbstractCustomSection> dialog = new Dialog<>();
+            dialog.initOwner(stage);
+            dialog.setTitle(existing == null ? "Add Custom Section" : "Edit Custom Section");
+
+            ButtonType saveType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().addAll(saveType, ButtonType.CANCEL);
+
+            TextField headerField = new TextField(existing == null ? "" : safe(existing.getHeader()));
+            ComboBox<String> occupationTypeBox = new ComboBox<>();
+            occupationTypeBox.setItems(FXCollections.observableArrayList(PresetCustomSection.getOccupationOptions()));
+            occupationTypeBox.setMaxWidth(Double.MAX_VALUE);
+
+            String existingOccupation = existing == null ? "" : safe(existing.getOccupationName()).trim();
+            boolean hasPresetOccupation = PresetCustomSection.getFieldNamesForOccupation(existingOccupation) != null;
+            occupationTypeBox.setValue(hasPresetOccupation ? existingOccupation : "Custom");
+
+            Label customOccupationLabel = new Label("Custom Occupation");
+            TextField customOccupationField = new TextField(hasPresetOccupation ? "" : existingOccupation);
+            customOccupationField.setPromptText("Enter occupation name");
+
+            Label parametersLabel = new Label("Parameters");
+            Label parametersHintLabel = new Label();
+            VBox parameterRowsBox = new VBox(8);
+            Button addParameterButton = new Button("Add Parameter");
+
+            class SectionFormState {
+                private final List<ParameterRow> rows = new ArrayList<>();
+
+                private Map<String, String> snapshotValues() {
+                    Map<String, String> values = new LinkedHashMap<>();
+                    for (ParameterRow row : rows) {
+                        String name = row.getName().trim();
+                        String value = row.getValue().trim();
+                        if (name.isEmpty() && value.isEmpty()) {
+                            continue;
+                        }
+                        values.put(name, value);
+                    }
+                    return values;
+                }
+
+                private void refreshRows() {
+                    parameterRowsBox.getChildren().clear();
+                    for (ParameterRow row : rows) {
+                        parameterRowsBox.getChildren().add(row.getNode());
+                    }
+                }
+
+                private void addCustomRow(String name, String value) {
+                    ParameterRow row = new ParameterRow(name, value, true, true);
+                    row.setOnRemove(event -> {
+                        rows.remove(row);
+                        refreshRows();
+                    });
+                    rows.add(row);
+                    refreshRows();
+                }
+
+                private void configureRows(Map<String, String> existingValues) {
+                    Map<String, String> values = existingValues == null ? new LinkedHashMap<>() : existingValues;
+                    String selection = occupationTypeBox.getValue();
+                    boolean isCustom = selection == null || PresetCustomSection.isCustomOption(selection);
+
+                    customOccupationLabel.setVisible(isCustom);
+                    customOccupationLabel.setManaged(isCustom);
+                    customOccupationField.setVisible(isCustom);
+                    customOccupationField.setManaged(isCustom);
+                    addParameterButton.setVisible(isCustom);
+                    addParameterButton.setManaged(isCustom);
+
+                    rows.clear();
+                    if (isCustom) {
+                        parametersHintLabel.setText("Add one or more name/value pairs.");
+                        if (values.isEmpty()) {
+                            addCustomRow("", "");
+                            return;
+                        }
+
+                        for (Map.Entry<String, String> entry : values.entrySet()) {
+                            addCustomRow(entry.getKey(), entry.getValue());
+                        }
+                        return;
+                    }
+
+                    String[] presetFieldNames = PresetCustomSection.getFieldNamesForOccupation(selection);
+                    parametersHintLabel.setText("Fill in the required fields for " + selection + ".");
+                    if (presetFieldNames != null) {
+                        for (String fieldName : presetFieldNames) {
+                            rows.add(new ParameterRow(fieldName, values.getOrDefault(fieldName, ""), false, false));
+                        }
+                    }
+                    refreshRows();
+                }
+
+                private AbstractCustomSection buildSection() throws InvalidInputException, CustomSectionException {
+                    String header = requireNonEmptyOrThrow(headerField.getText(), "Section header is required.");
+                    String selection = requireNonEmptyOrThrow(occupationTypeBox.getValue(), "Select an occupation type.");
+                    boolean isCustom = PresetCustomSection.isCustomOption(selection);
+                    String occupation = isCustom
+                            ? requireNonEmptyOrThrow(customOccupationField.getText(), "Occupation name is required.")
+                            : selection;
+
+                    List<CustomParameter> parameters = new ArrayList<>();
+                    for (ParameterRow row : rows) {
+                        String name = row.getName().trim();
+                        String value = row.getValue().trim();
+
+                        if (name.isEmpty() && value.isEmpty()) {
+                            continue;
+                        }
+                        if (name.isEmpty() || value.isEmpty()) {
+                            throw new InvalidInputException("Every parameter must have both a name and a value.");
+                        }
+
+                        parameters.add(new CustomParameter(name, value));
+                    }
+
+                    if (parameters.isEmpty()) {
+                        throw new CustomSectionException("Custom section must contain at least one parameter.");
+                    }
+
+                    String[] presetFieldNames = PresetCustomSection.getFieldNamesForOccupation(occupation);
+                    AbstractCustomSection section;
+                    if (presetFieldNames != null) {
+                        section = new PresetCustomSection(header, occupation, presetFieldNames);
+                    } else {
+                        section = new FlexibleCustomSection(header, occupation);
+                    }
+
+                    if (existing != null) {
+                        section.setId(existing.getId());
+                        section.setResumeId(existing.getResumeId());
+                    }
+                    section.setParameters(parameters);
+                    return section;
+                }
+            }
+
+            SectionFormState formState = new SectionFormState();
+            Map<String, String> initialValues = new LinkedHashMap<>();
+            if (existing != null) {
+                for (CustomParameter parameter : existing.getParameters()) {
+                    initialValues.put(safe(parameter.getName()), safe(parameter.getValue()));
+                }
+            }
+            formState.configureRows(initialValues);
+
+            occupationTypeBox.valueProperty().addListener((observable, oldValue, newValue) ->
+                    formState.configureRows(formState.snapshotValues())
+            );
+            addParameterButton.setOnAction(event -> formState.addCustomRow("", ""));
+
+            ScrollPane parameterScrollPane = new ScrollPane(parameterRowsBox);
+            parameterScrollPane.setFitToWidth(true);
+            parameterScrollPane.setPrefHeight(220);
+
+            GridPane grid = createDialogGrid();
+            grid.add(new Label("Header"), 0, 0);
+            grid.add(headerField, 1, 0);
+            grid.add(new Label("Occupation Type"), 0, 1);
+            grid.add(occupationTypeBox, 1, 1);
+            grid.add(customOccupationLabel, 0, 2);
+            grid.add(customOccupationField, 1, 2);
+            grid.add(parametersLabel, 0, 3);
+            VBox parameterSection = new VBox(8, parametersHintLabel, parameterScrollPane, addParameterButton);
+            grid.add(parameterSection, 1, 3);
+
+            GridPane.setHgrow(occupationTypeBox, Priority.ALWAYS);
+            GridPane.setHgrow(customOccupationField, Priority.ALWAYS);
+            GridPane.setHgrow(parameterSection, Priority.ALWAYS);
+            GridPane.setVgrow(parameterSection, Priority.ALWAYS);
+
+            Node saveButton = dialog.getDialogPane().lookupButton(saveType);
+            saveButton.disableProperty().bind(
+                    Bindings.createBooleanBinding(
+                            () -> headerField.getText().trim().isEmpty()
+                                    || occupationTypeBox.getValue() == null
+                                    || (PresetCustomSection.isCustomOption(occupationTypeBox.getValue())
+                                            && customOccupationField.getText().trim().isEmpty()),
+                            headerField.textProperty(),
+                            occupationTypeBox.valueProperty(),
+                            customOccupationField.textProperty()
+                    )
+            );
+
+            saveButton.addEventFilter(ActionEvent.ACTION, event -> {
+                try {
+                    formState.buildSection();
+                } catch (InvalidInputException e) {
+                    showError(stage, "INPUT ERROR", e.getMessage());
+                    event.consume();
+                } catch (CustomSectionException e) {
+                    showError(stage, "SECTION ERROR", e.getMessage());
+                    event.consume();
+                }
+            });
+
+            dialog.getDialogPane().setContent(grid);
+            dialog.getDialogPane().setPrefWidth(700);
+            dialog.setResultConverter(button -> {
+                if (button != saveType) {
+                    return null;
+                }
+                try {
+                    return formState.buildSection();
+                } catch (InvalidInputException | CustomSectionException e) {
+                    return null;
+                }
+            });
+
+            dialog.showAndWait();
+            return dialog.getResult();
+        }
+
+        private GridPane createDialogGrid() {
+            GridPane grid = new GridPane();
+            grid.setHgap(12);
+            grid.setVgap(12);
+            grid.setPadding(new Insets(12));
+            grid.setPrefWidth(460);
+            return grid;
+        }
+
+        private String requireNonEmptyOrThrow(String value, String message) throws InvalidInputException {
+            String text = value == null ? "" : value.trim();
+            if (text.isEmpty()) {
+                throw new InvalidInputException(message);
+            }
+            return text;
+        }
+
+        private String formatCustomSection(AbstractCustomSection section) {
+            StringBuilder builder = new StringBuilder();
+            builder.append("Header: ").append(safe(section.getHeader())).append("\n");
+            builder.append("Occupation: ").append(safe(section.getOccupationName())).append("\n\n");
+            for (CustomParameter parameter : section.getParameters()) {
+                builder.append(safe(parameter.getName()))
+                        .append(" = ")
+                        .append(safe(parameter.getValue()))
+                        .append("\n");
+            }
+            return builder.toString().trim();
+        }
+
+        private <T> TableColumn<T, String> createTextColumn(String title, Function<T, String> valueExtractor) {
+            TableColumn<T, String> column = new TableColumn<>(title);
+            column.setCellValueFactory(cellData -> new ReadOnlyStringWrapper(safe(valueExtractor.apply(cellData.getValue()))));
+            return column;
+        }
+
+        private List<Education> copyEducationList(List<Education> source) {
+            List<Education> copies = new ArrayList<>();
+            for (Education education : source) {
+                copies.add(copyEducation(education));
+            }
+            return copies;
+        }
+
+        private List<Experience> copyExperienceList(List<Experience> source) {
+            List<Experience> copies = new ArrayList<>();
+            for (Experience experience : source) {
+                copies.add(copyExperience(experience));
+            }
+            return copies;
+        }
+
+        private List<Project> copyProjectList(List<Project> source) {
+            List<Project> copies = new ArrayList<>();
+            for (Project project : source) {
+                copies.add(copyProject(project));
+            }
+            return copies;
+        }
+
+        private List<Skill> copySkillList(List<Skill> source) {
+            List<Skill> copies = new ArrayList<>();
+            for (Skill skill : source) {
+                copies.add(copySkill(skill));
+            }
+            return copies;
+        }
+
+        private List<AbstractCustomSection> copyCustomSectionList(List<AbstractCustomSection> source) {
+            List<AbstractCustomSection> copies = new ArrayList<>();
+            for (AbstractCustomSection section : source) {
+                FlexibleCustomSection copy = new FlexibleCustomSection(safe(section.getHeader()), safe(section.getOccupationName()));
+                copy.setId(section.getId());
+                copy.setResumeId(section.getResumeId());
+                copy.setParameters(new ArrayList<>(copyCustomParameters(section.getParameters())));
+                copies.add(copy);
+            }
+            return copies;
+        }
+
+        private List<CustomParameter> copyCustomParameters(List<CustomParameter> source) {
+            List<CustomParameter> copies = new ArrayList<>();
+            for (CustomParameter parameter : source) {
+                CustomParameter copy = new CustomParameter();
+                copy.setId(parameter.getId());
+                copy.setSectionId(parameter.getSectionId());
+                copy.setName(parameter.getName());
+                copy.setValue(parameter.getValue());
+                copies.add(copy);
+            }
+            return copies;
+        }
+
+        private Education copyEducation(Education education) {
+            Education copy = new Education();
+            if (education != null) {
+                copy.setId(education.getId());
+                copy.setResumeId(education.getResumeId());
+                copy.setDegree(education.getDegree());
+                copy.setUniversity(education.getUniversity());
+                copy.setYear(education.getYear());
+                copy.setCgpa(education.getCgpa());
+            }
+            return copy;
+        }
+
+        private Experience copyExperience(Experience experience) {
+            Experience copy = new Experience();
+            if (experience != null) {
+                copy.setId(experience.getId());
+                copy.setResumeId(experience.getResumeId());
+                copy.setRole(experience.getRole());
+                copy.setCompany(experience.getCompany());
+                copy.setDuration(experience.getDuration());
+                copy.setDescription(experience.getDescription());
+            }
+            return copy;
+        }
+
+        private Project copyProject(Project project) {
+            Project copy = new Project();
+            if (project != null) {
+                copy.setId(project.getId());
+                copy.setResumeId(project.getResumeId());
+                copy.setTitle(project.getTitle());
+                copy.setDescription(project.getDescription());
+            }
+            return copy;
+        }
+
+        private Skill copySkill(Skill skill) {
+            Skill copy = new Skill();
+            if (skill != null) {
+                copy.setId(skill.getId());
+                copy.setResumeId(skill.getResumeId());
+                copy.setSkillName(skill.getSkillName());
+            }
+            return copy;
+        }
+
+        private static final class ParameterRow {
+            private final HBox root;
+            private final TextField nameField;
+            private final TextField valueField;
+            private final Button removeButton;
+
+            private ParameterRow(String name, String value, boolean nameEditable, boolean removable) {
+                this.nameField = new TextField(name);
+                this.valueField = new TextField(value);
+                this.removeButton = new Button("Remove");
+
+                nameField.setPromptText("Name");
+                valueField.setPromptText("Value");
+                nameField.setEditable(nameEditable);
+                nameField.setFocusTraversable(nameEditable);
+                nameField.setPrefWidth(180);
+                valueField.setPrefWidth(260);
+
+                removeButton.setVisible(removable);
+                removeButton.setManaged(removable);
+
+                HBox.setHgrow(valueField, Priority.ALWAYS);
+                this.root = new HBox(8, nameField, valueField, removeButton);
+                this.root.setAlignment(Pos.CENTER_LEFT);
+            }
+
+            private Node getNode() {
+                return root;
+            }
+
+            private String getName() {
+                return nameField.getText();
+            }
+
+            private String getValue() {
+                return valueField.getText();
+            }
+
+            private void setOnRemove(javafx.event.EventHandler<ActionEvent> handler) {
+                removeButton.setOnAction(handler);
+            }
+        }
+    }
+}

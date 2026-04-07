@@ -13,10 +13,7 @@ import java.util.List;
 
 public class PdfGenerator {
 
-    public static void generate(Resume resume) throws IOException, DocumentException {
-        String filename = resume.getFullName().replaceAll("\\s+", "_") + "_Resume.pdf";
-        generate(resume, new FileOutputStream(filename));
-    }
+
     
     public static void generate(Resume resume, java.io.OutputStream out) throws IOException, DocumentException {
         Document document = new Document(PageSize.A4, 36, 36, 36, 50);
